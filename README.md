@@ -1,7 +1,5 @@
 # AI-Powered URL Shortener
 
-> A modern Django-based URL shortening service with advanced analytics dashboard and AI-powered insights using LangChain and OpenAI.
-
 A modern URL shortening service built with Django that includes advanced analytics and AI-powered insights.
 
 ## Features
@@ -100,26 +98,4 @@ url_shortener/
 └── requirements.txt      # Project dependencies
 ```
 
-## Development
 
-To contribute to this project:
-
-1. Fork the repository
-2. Create a new branch (`git checkout -b feature/your-feature`)
-3. Make your changes
-4. Run tests
-5. Commit your changes (`git commit -m 'Add some feature'`)
-6. Push to the branch (`git push origin feature/your-feature`)
-7. Create a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgements
-
-- [Django](https://www.djangoproject.com/)
-- [Bootstrap](https://getbootstrap.com/)
-- [Plotly](https://plotly.com/)
-- [LangChain](https://langchain.readthedocs.io/)
-- [OpenAI](https://openai.com/)
