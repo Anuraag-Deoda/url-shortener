@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}URL Shortener - Shorten Your URLs{% endblock %}
+
+{% block hero %}
+<div class="hero">
+    <div class="container text-center">
+        <h1 class="display-4 fw-bold mb-3">Shorten Your URLs</h1>
+        <p class="lead mb-4">Create shorter, more manageable links with our powerful URL shortener service.</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-body p-4">
+                <h2 class="card-title text-center mb-4">Create a Short URL</h2>
+                
+                <form method="post" id="url-form">
+                    {% csrf_token %}
+                    {{ form|crispy }}
+                    
+                    <div class="d-grid gap-2 mt-3">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-link me-2"></i>Shorten URL
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="result" class="mt-4" style="display: none;">
+                    <div class="alert alert-success">
+                        <h5 class="alert-heading">URL Shortened Successfully!</h5>
+                        <p class="mb-0">Your shortened URL:</p>
+                        <div class="input-group mt-2">
+                            <input type="text" id="shortened-url" class="form-control" readonly>
+                            <button class="btn btn-outline-secondary" type="button" id="copy-btn" data-bs-toggle="tooltip" data-bs-placement="top" title="Copy to clipboard">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <p class="mt-3 mb-0">Original URL:</p>
+                        <p class="text-truncate" id="original-url"></p>
+                        <div class="mt-3">
+                            <a href="#" id="stats-link" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-chart-bar me-1"></i>View Stats
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card stats-card mb-4">
+                    <i class="fas fa-bolt"></i>
+                    <div class="count">Fast</div>
+                    <div class="label">Instant URL shortening</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card stats-card mb-4">
+                    <i class="fas fa-chart-line"></i>
+                    <div class="count">Smart</div>
+                    <div class="label">Advanced analytics</div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card stats-card mb-4">
+                    <i class="fas fa-brain"></i>
+                    <div class="count">AI</div>
+                    <div class="label">Intelligent insights</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Handle form submission via AJAX
+        $('#url-form').on('submit', function(e) {
+            e.preventDefault();
+            
+            $.ajax({
+                url: "{% url 'shortener:api_create' %}",
+                type: "POST",
+                data: $(this).serialize(),
+                success: function(data) {
+                    $('#shortened-url').val(data.short_url);
+                    $('#original-url').text(data.original_url);
+                    $('#stats-link').attr('href', '/analytics/url/' + data.short_code + '/');
+                    $('#result').show();
+                    
+                    // Initialize tooltip
+                    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+                    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                        return new bootstrap.Tooltip(tooltipTriggerEl);
+                    });
+                },
+                error: function(xhr) {
+                    let errorMsg = 'An error occurred. Please try again.';
+                    if (xhr.responseJSON && xhr.responseJSON.errors) {
+                        errorMsg = xhr.responseJSON.errors.original_url[0];
+                    }
+                    
+                    $('#result').html(
+                        `<div class="alert alert-danger">
+                            <h5 class="alert-heading">Error!</h5>
+                            <p>${errorMsg}</p>
+                        </div>`
+                    ).show();
+                }
+            });
+        });
+        
+        // Copy to clipboard functionality
+        $('#copy-btn').on('click', function() {
+            var shortenedUrl = document.getElementById('shortened-url');
+            shortenedUrl.select();
+            document.execCommand('copy');
+            
+            // Update tooltip
+            var tooltip = bootstrap.Tooltip.getInstance(this);
+            tooltip.setContent({ '.tooltip-inner': 'Copied!' });
+            
+            // Reset tooltip after 2 seconds
+            setTimeout(function() {
+                tooltip.setContent({ '.tooltip-inner': 'Copy to clipboard' });
+            }, 2000);
+        });
+    });
+</script>
+{% endblock %}

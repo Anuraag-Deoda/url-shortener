@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+{% load plotly_dash %}
+
+{% block title %}Analytics Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dashboard-card {
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        height: 100%;
+    }
+    
+    .dashboard-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    .dashboard-card .card-header {
+        background-color: var(--primary-color);
+        color: white;
+        font-weight: 600;
+        padding: 1rem;
+    }
+    
+    .stat-card {
+        text-align: center;
+        padding: 1.5rem;
+        border-radius: 10px;
+        background: white;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .stat-card .icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        color: var(--primary-color);
+    }
+    
+    .stat-card .count {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        color: var(--dark-color);
+    }
+    
+    .stat-card .label {
+        font-size: 1rem;
+        color: #6c757d;
+    }
+    
+    .recent-activity-item {
+        padding: 0.75rem;
+        border-left: 3px solid var(--primary-color);
+        background-color: #f8f9fa;
+        margin-bottom: 0.5rem;
+        border-radius: 0 5px 5px 0;
+    }
+    
+    .recent-activity-item:hover {
+        background-color: #e9ecef;
+    }
+    
+    .dashboard-tabs .nav-link {
+        color: var(--dark-color);
+        font-weight: 500;
+    }
+    
+    .dashboard-tabs .nav-link.active {
+        color: var(--primary-color);
+        border-bottom: 3px solid var(--primary-color);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h1 class="mb-0">Analytics Dashboard</h1>
+        <p class="text-muted">Gain insights into your shortened URLs</p>
+    </div>
+    <div class="col-md-6 text-md-end">
+        <a href="{% url 'shortener:home' %}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i>Create New URL
+        </a>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="stat-card mb-4">
+            <div class="icon">
+                <i class="fas fa-link"></i>
+            </div>
+            <div class="count">{{ total_urls }}</div>
+            <div class="label">Total URLs</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card mb-4">
+            <div class="icon">
+                <i class="fas fa-mouse-pointer"></i>
+            </div>
+            <div class="count">{{ total_clicks }}</div>
+            <div class="label">Total Clicks</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card mb-4">
+            <div class="icon">
+                <i class="fas fa-chart-line"></i>
+            </div>
+            <div class="count">
+                {% if total_urls > 0 %}
+                    {{ total_clicks|floatformat:1 }}
+                {% else %}
+                    0
+                {% endif %}
+            </div>
+            <div class="label">Avg. Clicks Per URL</div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card dashboard-card mb-4">
+            <div class="card-header">
+                <i class="fas fa-chart-area me-1"></i>
+                Click Activity (Last 30 Days)
+            </div>
+            <div class="card-body">
+                {% if clicks_chart %}
+                    {{ clicks_chart|safe }}
+                {% else %}
+                    <div class="alert alert-info">
+                        <p class="mb-0">No click data available for the last 30 days.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card dashboard-card mb-4">
+            <div class="card-header">
+                <i class="fas fa-table me-1"></i>
+                Top Performing URLs
+            </div>
+            <div class="card-body">
+                {% if top_urls %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Short URL</th>
+                                    <th>Original URL</th>
+                                    <th>Clicks</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for url in top_urls %}
+                                    <tr>
+                                        <td>
+                                            <a href="{% url 'shortener:redirect' url.short_code %}" target="_blank">
+                                                {{ request.get_host }}/{{ url.short_code }}
+                                            </a>
+                                        </td>
+                                        <td class="text-truncate" style="max-width: 200px;">
+                                            <a href="{{ url.original_url }}" target="_blank">
+                                                {{ url.original_url }}
+                                            </a>
+                                        </td>
+                                        <td>{{ url.clicks }}</td>
+                                        <td>{{ url.created_at|date:"M d, Y" }}</td>
+                                        <td>
+                                            <a href="{% url 'analytics:url_stats' url.short_code %}" class="btn btn-sm btn-primary">
+                                                <i class="fas fa-chart-bar me-1"></i>Details
+                                            </a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        <p class="mb-0">No URLs have been created yet.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card dashboard-card mb-4">
+            <div class="card-header">
+                <i class="fas fa-history me-1"></i>
+                Recent Activity
+            </div>
+            <div class="card-body">
+                {% if recent_clicks %}
+                    <div class="recent-activity-list">
+                        {% for click in recent_clicks %}
+                            <div class="recent-activity-item">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <strong>{{ click.url.short_code }}</strong> was clicked
+                                    </div>
+                                    <small class="text-muted">{{ click.timestamp|timesince }} ago</small>
+                                </div>
+                                <div class="mt-1 small">
+                                    <span class="badge bg-secondary">{{ click.device_type }}</span>
+                                    <span class="badge bg-secondary">{{ click.browser }}</span>
+                                    {% if click.country %}
+                                        <span class="badge bg-secondary">{{ click.country }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        <p class="mb-0">No recent activity to display.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card dashboard-card mb-4">
+            <div class="card-header">
+                <i class="fas fa-brain me-1"></i>
+                AI Analytics Dashboard
+            </div>
+            <div class="card-body">
+                <p>Interactive AI-powered analytics dashboard:</p>
+                <div class="ratio ratio-16x9">
+                    {% plotly_app name="URLAnalyticsDashboard" ratio=0.65 %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block title %}URL Shortened Successfully{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body p-4">
+                <h2 class="card-title text-center mb-4">URL Shortened Successfully!</h2>
+                
+                <div class="alert alert-success">
+                    <h5 class="alert-heading">Your shortened URL is ready!</h5>
+                    <p class="mb-0">Your shortened URL:</p>
+                    <div class="input-group mt-2">
+                        <input type="text" id="shortened-url" class="form-control" value="{{ short_url }}" readonly>
+                        <button class="btn btn-outline-secondary" type="button" id="copy-btn" data-bs-toggle="tooltip" data-bs-placement="top" title="Copy to clipboard">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                    <p class="mt-3 mb-0">Original URL:</p>
+                    <p class="text-truncate">{{ url.original_url }}</p>
+                </div>
+                
+                <div class="d-flex justify-content-between mt-4">
+                    <a href="{% url 'shortener:home' %}" class="btn btn-outline-primary">
+                        <i class="fas fa-plus me-1"></i>Create Another
+                    </a>
+                    <a href="{% url 'analytics:url_stats' url.short_code %}" class="btn btn-primary">
+                        <i class="fas fa-chart-bar me-1"></i>View Analytics
+                    </a>
+                </div>
+                
+                <div class="mt-4">
+                    <h5>Share your shortened URL:</h5>
+                    <div class="d-flex gap-2 mt-3">
+                        <a href="https://twitter.com/intent/tweet?url={{ short_url|urlencode }}&text=Check%20out%20this%20link:" class="btn btn-outline-primary" target="_blank">
+                            <i class="fab fa-twitter me-1"></i>Twitter
+                        </a>
+                        <a href="https://www.facebook.com/sharer/sharer.php?u={{ short_url|urlencode }}" class="btn btn-outline-primary" target="_blank">
+                            <i class="fab fa-facebook me-1"></i>Facebook
+                        </a>
+                        <a href="https://www.linkedin.com/shareArticle?mini=true&url={{ short_url|urlencode }}" class="btn btn-outline-primary" target="_blank">
+                            <i class="fab fa-linkedin me-1"></i>LinkedIn
+                        </a>
+                        <a href="mailto:?subject=Check%20out%20this%20link&body={{ short_url|urlencode }}" class="btn btn-outline-primary">
+                            <i class="fas fa-envelope me-1"></i>Email
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Initialize tooltip
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+        
+        // Copy to clipboard functionality
+        $('#copy-btn').on('click', function() {
+            var shortenedUrl = document.getElementById('shortened-url');
+            shortenedUrl.select();
+            document.execCommand('copy');
+            
+            // Update tooltip
+            var tooltip = bootstrap.Tooltip.getInstance(this);
+            tooltip.setContent({ '.tooltip-inner': 'Copied!' });
+            
+            // Reset tooltip after 2 seconds
+            setTimeout(function() {
+                tooltip.setContent({ '.tooltip-inner': 'Copy to clipboard' });
+            }, 2000);
+        });
+    });
+</script>
+{% endblock %}

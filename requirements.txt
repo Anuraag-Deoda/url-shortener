@@ -1,0 +1,16 @@
+Django
+django-crispy-forms
+crispy-bootstrap5
+python-dotenv
+validators
+pandas
+matplotlib
+scikit-learn
+plotly
+django-plotly-dash
+channels
+langchain
+openai
+tiktoken
+django-cors-headers
+user-agents

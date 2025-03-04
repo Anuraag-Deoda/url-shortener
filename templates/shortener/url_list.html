@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+
+{% block title %}My URLs{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title mb-4">My URLs</h2>
+                
+                {% if urls %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Short URL</th>
+                                    <th>Original URL</th>
+                                    <th>Created</th>
+                                    <th>Clicks</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for url in urls %}
+                                    <tr>
+                                        <td>
+                                            <a href="{% url 'shortener:redirect' url.short_code %}" target="_blank">
+                                                {{ request.get_host }}/{{ url.short_code }}
+                                            </a>
+                                        </td>
+                                        <td class="text-truncate" style="max-width: 300px;">
+                                            <a href="{{ url.original_url }}" target="_blank">
+                                                {{ url.original_url }}
+                                            </a>
+                                        </td>
+                                        <td>{{ url.created_at|date:"M d, Y" }}</td>
+                                        <td>{{ url.clicks }}</td>
+                                        <td>
+                                            <a href="{% url 'analytics:url_stats' url.short_code %}" class="btn btn-sm btn-primary">
+                                                <i class="fas fa-chart-bar me-1"></i>Analytics
+                                            </a>
+                                            <button class="btn btn-sm btn-outline-primary copy-btn" 
+                                                    data-url="{{ request.scheme }}://{{ request.get_host }}{% url 'shortener:redirect' url.short_code %}"
+                                                    data-bs-toggle="tooltip" 
+                                                    data-bs-placement="top" 
+                                                    title="Copy to clipboard">
+                                                <i class="fas fa-copy"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    {% if is_paginated %}
+                        <nav aria-label="Page navigation" class="mt-4">
+                            <ul class="pagination justify-content-center">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=1">&laquo; First</a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                                    </li>
+                                {% endif %}
+                                
+                                {% for num in page_obj.paginator.page_range %}
+                                    {% if page_obj.number == num %}
+                                        <li class="page-item active">
+                                            <span class="page-link">{{ num }}</span>
+                                        </li>
+                                    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Last &raquo;</a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="alert alert-info">
+                        <p class="mb-0">You haven't created any shortened URLs yet.</p>
+                    </div>
+                    <a href="{% url 'shortener:home' %}" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Create Your First URL
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Initialize tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+        
+        // Copy to clipboard functionality
+        $('.copy-btn').on('click', function() {
+            var url = $(this).data('url');
+            
+            // Create a temporary input element
+            var tempInput = document.createElement('input');
+            tempInput.value = url;
+            document.body.appendChild(tempInput);
+            
+            // Select and copy
+            tempInput.select();
+            document.execCommand('copy');
+            
+            // Remove the temporary element
+            document.body.removeChild(tempInput);
+            
+            // Update tooltip
+            var tooltip = bootstrap.Tooltip.getInstance(this);
+            tooltip.setContent({ '.tooltip-inner': 'Copied!' });
+            
+            // Reset tooltip after 2 seconds
+            setTimeout(function() {
+                tooltip.setContent({ '.tooltip-inner': 'Copy to clipboard' });
+            }, 2000);
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,306 @@
+{% extends 'base.html' %}
+
+{% block title %}URL Analytics - {{ url.short_code }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-header {
+        background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+    }
+    
+    .chart-card {
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+        height: 100%;
+        margin-bottom: 1.5rem;
+    }
+    
+    .chart-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    .chart-card .card-header {
+        background-color: var(--primary-color);
+        color: white;
+        font-weight: 600;
+        padding: 1rem;
+    }
+    
+    .insight-card {
+        border-left: 4px solid var(--primary-color);
+        background-color: #f8f9fa;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-radius: 0 5px 5px 0;
+    }
+    
+    .insight-card .title {
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+    
+    .insight-card .description {
+        color: #6c757d;
+    }
+    
+    .url-info {
+        background-color: white;
+        border-radius: 10px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 1.5rem;
+    }
+    
+    .url-info .label {
+        font-weight: 600;
+        color: #6c757d;
+    }
+    
+    .url-info .value {
+        font-weight: 400;
+    }
+    
+    .url-info .clicks {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: var(--primary-color);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h1 class="mb-0">URL Analytics</h1>
+        <p class="text-muted">Detailed statistics for your shortened URL</p>
+    </div>
+    <div class="col-md-6 text-md-end">
+        <a href="{% url 'shortener:url_list' %}" class="btn btn-outline-primary me-2">
+            <i class="fas fa-arrow-left me-1"></i>Back to URLs
+        </a>
+        <a href="{% url 'analytics:dashboard' %}" class="btn btn-primary">
+            <i class="fas fa-chart-line me-1"></i>Dashboard
+        </a>
+    </div>
+</div>
+
+<div class="stats-header">
+    <div class="row">
+        <div class="col-md-8">
+            <h2 class="mb-3">{{ url.short_code }}</h2>
+            <p class="mb-1">
+                <strong>Short URL:</strong> 
+                <a href="{% url 'shortener:redirect' url.short_code %}" class="text-white" target="_blank">
+                    {{ request.scheme }}://{{ request.get_host }}/{{ url.short_code }}
+                </a>
+                <button class="btn btn-sm btn-light ms-2 copy-btn" 
+                        data-url="{{ request.scheme }}://{{ request.get_host }}{% url 'shortener:redirect' url.short_code %}"
+                        data-bs-toggle="tooltip" 
+                        data-bs-placement="top" 
+                        title="Copy to clipboard">
+                    <i class="fas fa-copy"></i>
+                </button>
+            </p>
+            <p class="mb-1">
+                <strong>Original URL:</strong> 
+                <a href="{{ url.original_url }}" class="text-white text-truncate d-inline-block" style="max-width: 500px;" target="_blank">
+                    {{ url.original_url }}
+                </a>
+            </p>
+            <p class="mb-0">
+                <strong>Created:</strong> {{ url.created_at|date:"F d, Y H:i" }}
+            </p>
+        </div>
+        <div class="col-md-4 text-center">
+            <div class="display-1 mb-0">{{ url.clicks }}</div>
+            <p class="lead mb-0">Total Clicks</p>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Charts -->
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <i class="fas fa-chart-line me-1"></i>
+                        Clicks Over Time
+                    </div>
+                    <div class="card-body">
+                        {% if time_chart %}
+                            {{ time_chart|safe }}
+                        {% else %}
+                            <div class="alert alert-info">
+                                <p class="mb-0">No click data available yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <i class="fas fa-mobile-alt me-1"></i>
+                        Device Distribution
+                    </div>
+                    <div class="card-body">
+                        {% if device_chart %}
+                            {{ device_chart|safe }}
+                        {% else %}
+                            <div class="alert alert-info">
+                                <p class="mb-0">No device data available yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <i class="fas fa-globe me-1"></i>
+                        Browser Distribution
+                    </div>
+                    <div class="card-body">
+                        {% if browser_chart %}
+                            {{ browser_chart|safe }}
+                        {% else %}
+                            <div class="alert alert-info">
+                                <p class="mb-0">No browser data available yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-12">
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <i class="fas fa-laptop me-1"></i>
+                        Operating System Distribution
+                    </div>
+                    <div class="card-body">
+                        {% if os_chart %}
+                            {{ os_chart|safe }}
+                        {% else %}
+                            <div class="alert alert-info">
+                                <p class="mb-0">No OS data available yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <!-- AI Insights -->
+        <div class="card chart-card">
+            <div class="card-header">
+                <i class="fas fa-brain me-1"></i>
+                AI-Generated Insights
+            </div>
+            <div class="card-body">
+                <div id="ai-insights">
+                    <div class="d-flex justify-content-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    <p class="text-center mt-2">Generating AI insights...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Initialize tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+        
+        // Copy to clipboard functionality
+        $('.copy-btn').on('click', function() {
+            var url = $(this).data('url');
+            
+            // Create a temporary input element
+            var tempInput = document.createElement('input');
+            tempInput.value = url;
+            document.body.appendChild(tempInput);
+            
+            // Select and copy
+            tempInput.select();
+            document.execCommand('copy');
+            
+            // Remove the temporary element
+            document.body.removeChild(tempInput);
+            
+            // Update tooltip
+            var tooltip = bootstrap.Tooltip.getInstance(this);
+            tooltip.setContent({ '.tooltip-inner': 'Copied!' });
+            
+            // Reset tooltip after 2 seconds
+            setTimeout(function() {
+                tooltip.setContent({ '.tooltip-inner': 'Copy to clipboard' });
+            }, 2000);
+        });
+        
+        // Fetch AI insights
+        $.ajax({
+            url: "{% url 'analytics:ai_insights_api' url.short_code %}",
+            type: "GET",
+            success: function(data) {
+                if (data.success) {
+                    var insightsHtml = '';
+                    
+                    if (data.insights.length > 0) {
+                        data.insights.forEach(function(insight) {
+                            insightsHtml += `
+                                <div class="insight-card">
+                                    <div class="title">${insight.title}</div>
+                                    <div class="description">${insight.description}</div>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        insightsHtml = '<div class="alert alert-info">No insights available yet.</div>';
+                    }
+                    
+                    $('#ai-insights').html(insightsHtml);
+                } else {
+                    $('#ai-insights').html(`
+                        <div class="alert alert-warning">
+                            <p class="mb-0">${data.message || 'Unable to generate insights at this time.'}</p>
+                        </div>
+                    `);
+                }
+            },
+            error: function() {
+                $('#ai-insights').html(`
+                    <div class="alert alert-danger">
+                        <p class="mb-0">Error loading AI insights. Please try again later.</p>
+                    </div>
+                `);
+            }
+        });
+    });
+</script>
+{% endblock %}
