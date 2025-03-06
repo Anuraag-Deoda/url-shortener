@@ -5,6 +5,9 @@ from django.db.models import Count
 from django.db.models.functions import TruncDay, TruncHour
 from django.utils import timezone
 from django.conf import settings
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_http_methods
+from django.core.paginator import Paginator
 
 from shortener.models import URL, ClickData
 import pandas as pd
@@ -21,6 +24,7 @@ from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
 import json
 import datetime
+from .services import AnalyticsService
 
 # Create a Dash app for the dashboard
 app = DjangoDash('URLAnalyticsDashboard')
@@ -372,4 +376,74 @@ def ai_insights_api(request, short_code):
         return JsonResponse({
             'success': False,
             'message': f'Error generating insights: {str(e)}'
+        }, status=500)
+
+@login_required
+def dashboard(request):
+    """Main analytics dashboard view"""
+    stats = AnalyticsService.get_dashboard_stats()
+    
+    # Paginate top URLs
+    paginator = Paginator(stats['top_urls'], 10)
+    page = request.GET.get('page', 1)
+    top_urls = paginator.get_page(page)
+    
+    context = {
+        'stats': stats,
+        'top_urls': top_urls,
+        'growth_rates': stats['growth_rate'],
+        'engagement': stats['engagement_metrics'],
+        'retention': stats['retention_rate']
+    }
+    return render(request, 'analytics/dashboard.html', context)
+
+@login_required
+def url_stats(request, url_id):
+    """Detailed statistics for a specific URL"""
+    url = get_object_or_404(URL, id=url_id)
+    stats = AnalyticsService.get_url_stats(url_id)
+    
+    context = {
+        'url': url,
+        'stats': stats,
+        'hourly_data': stats['hourly_data'],
+        'peak_hours': stats['peak_hours']
+    }
+    return render(request, 'analytics/url_stats.html', context)
+
+@login_required
+@require_http_methods(['GET'])
+def api_url_stats(request, url_id):
+    """API endpoint for URL statistics"""
+    try:
+        stats = AnalyticsService.get_url_stats(url_id)
+        return JsonResponse({
+            'success': True,
+            'data': stats
+        })
+    except URL.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'URL not found'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@login_required
+@require_http_methods(['GET'])
+def api_dashboard_stats(request):
+    """API endpoint for dashboard statistics"""
+    try:
+        stats = AnalyticsService.get_dashboard_stats()
+        return JsonResponse({
+            'success': True,
+            'data': stats
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
         }, status=500)

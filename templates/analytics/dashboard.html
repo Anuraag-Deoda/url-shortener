@@ -1,246 +1,521 @@
 {% extends 'base.html' %}
-{% load plotly_dash %}
+{% load static %}
 
 {% block title %}Analytics Dashboard{% endblock %}
 
 {% block extra_css %}
 <style>
-    .dashboard-card {
-        border-radius: 10px;
-        overflow: hidden;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        transition: all 0.3s ease;
-        height: 100%;
-    }
-    
-    .dashboard-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
-    }
-    
-    .dashboard-card .card-header {
-        background-color: var(--primary-color);
-        color: white;
-        font-weight: 600;
-        padding: 1rem;
-    }
-    
-    .stat-card {
-        text-align: center;
-        padding: 1.5rem;
-        border-radius: 10px;
-        background: white;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-    
-    .stat-card .icon {
-        font-size: 2.5rem;
-        margin-bottom: 1rem;
-        color: var(--primary-color);
-    }
-    
-    .stat-card .count {
-        font-size: 2.5rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
-        color: var(--dark-color);
-    }
-    
-    .stat-card .label {
-        font-size: 1rem;
-        color: #6c757d;
-    }
-    
-    .recent-activity-item {
-        padding: 0.75rem;
-        border-left: 3px solid var(--primary-color);
+    .dashboard-container {
+        padding: 2rem;
         background-color: #f8f9fa;
+        min-height: calc(100vh - 60px);
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        border: 1px solid rgba(0,0,0,0.05);
+    }
+
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+    }
+
+    .stat-card .icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1rem;
+        background: var(--primary-color);
+        color: white;
+    }
+
+    .stat-card .title {
+        font-size: 0.875rem;
+        color: #6c757d;
         margin-bottom: 0.5rem;
-        border-radius: 0 5px 5px 0;
-    }
-    
-    .recent-activity-item:hover {
-        background-color: #e9ecef;
-    }
-    
-    .dashboard-tabs .nav-link {
-        color: var(--dark-color);
         font-weight: 500;
     }
-    
-    .dashboard-tabs .nav-link.active {
-        color: var(--primary-color);
-        border-bottom: 3px solid var(--primary-color);
+
+    .stat-card .value {
+        font-size: 1.75rem;
+        font-weight: 600;
+        color: #2d3748;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-card .change {
+        font-size: 0.875rem;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .change.positive {
+        color: #38a169;
+    }
+
+    .change.negative {
+        color: #e53e3e;
+    }
+
+    .chart-container {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+        border: 1px solid rgba(0,0,0,0.05);
+    }
+
+    .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .chart-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #2d3748;
+    }
+
+    .table-container {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+        border: 1px solid rgba(0,0,0,0.05);
+    }
+
+    .table-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
+
+    .table-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #2d3748;
+        margin: 0;
+    }
+
+    .custom-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .custom-table th {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        font-weight: 500;
+        text-align: left;
+        color: #6c757d;
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+    }
+
+    .custom-table td {
+        padding: 1rem;
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+        color: #2d3748;
+    }
+
+    .custom-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .custom-table tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    .badge {
+        padding: 0.25rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .badge-success {
+        background-color: #d1fae5;
+        color: #065f46;
+    }
+
+    .badge-warning {
+        background-color: #fef3c7;
+        color: #92400e;
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 1.5rem;
+    }
+
+    .page-link {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        background: white;
+        border: 1px solid rgba(0,0,0,0.05);
+        color: #2d3748;
+        text-decoration: none;
+        transition: all 0.2s ease;
+    }
+
+    .page-link:hover {
+        background: #f8f9fa;
+    }
+
+    .page-link.active {
+        background: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="row mb-4">
-    <div class="col-md-6">
-        <h1 class="mb-0">Analytics Dashboard</h1>
-        <p class="text-muted">Gain insights into your shortened URLs</p>
-    </div>
-    <div class="col-md-6 text-md-end">
-        <a href="{% url 'shortener:home' %}" class="btn btn-primary">
-            <i class="fas fa-plus me-1"></i>Create New URL
-        </a>
-    </div>
-</div>
-
-<div class="row mb-4">
-    <div class="col-md-4">
-        <div class="stat-card mb-4">
+<div class="dashboard-container">
+    <div class="stats-grid">
+        <div class="stat-card">
             <div class="icon">
                 <i class="fas fa-link"></i>
             </div>
-            <div class="count">{{ total_urls }}</div>
-            <div class="label">Total URLs</div>
+            <div class="title">Total URLs</div>
+            <div class="value">{{ stats.total_urls }}</div>
+            <div class="change positive">
+                <i class="fas fa-arrow-up"></i>
+                {{ stats.growth_rate.daily|floatformat:1 }}% Today
+            </div>
         </div>
-    </div>
-    <div class="col-md-4">
-        <div class="stat-card mb-4">
+        
+        <div class="stat-card">
             <div class="icon">
                 <i class="fas fa-mouse-pointer"></i>
             </div>
-            <div class="count">{{ total_clicks }}</div>
-            <div class="label">Total Clicks</div>
+            <div class="title">Total Clicks</div>
+            <div class="value">{{ stats.total_clicks }}</div>
+            <div class="change positive">
+                <i class="fas fa-arrow-up"></i>
+                {{ stats.growth_rate.weekly|floatformat:1 }}% This Week
+            </div>
         </div>
-    </div>
-    <div class="col-md-4">
-        <div class="stat-card mb-4">
+        
+        <div class="stat-card">
             <div class="icon">
                 <i class="fas fa-chart-line"></i>
             </div>
-            <div class="count">
-                {% if total_urls > 0 %}
-                    {{ total_clicks|floatformat:1 }}
-                {% else %}
-                    0
-                {% endif %}
+            <div class="title">Today's Clicks</div>
+            <div class="value">{{ stats.today_clicks }}</div>
+            <div class="change {% if stats.growth_rate.daily >= 0 %}positive{% else %}negative{% endif %}">
+                <i class="fas fa-arrow-{% if stats.growth_rate.daily >= 0 %}up{% else %}down{% endif %}"></i>
+                {{ stats.growth_rate.daily|abs|floatformat:1 }}% vs Yesterday
             </div>
-            <div class="label">Avg. Clicks Per URL</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="icon">
+                <i class="fas fa-users"></i>
+            </div>
+            <div class="title">Engagement Rate</div>
+            <div class="value">{{ stats.engagement_metrics.bounce_rate|floatformat:1 }}%</div>
+            <div class="title">Avg. Session: {{ stats.engagement_metrics.avg_session_duration|floatformat:0 }}s</div>
         </div>
     </div>
-</div>
 
-<div class="row">
-    <div class="col-lg-8">
-        <div class="card dashboard-card mb-4">
-            <div class="card-header">
-                <i class="fas fa-chart-area me-1"></i>
-                Click Activity (Last 30 Days)
-            </div>
-            <div class="card-body">
-                {% if clicks_chart %}
-                    {{ clicks_chart|safe }}
-                {% else %}
-                    <div class="alert alert-info">
-                        <p class="mb-0">No click data available for the last 30 days.</p>
-                    </div>
-                {% endif %}
+    <div class="chart-container">
+        <div class="chart-header">
+            <h3 class="chart-title">Click Trends</h3>
+            <div class="chart-actions">
+                <button class="btn btn-sm btn-outline-secondary" onclick="updateChart('daily')">Daily</button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="updateChart('weekly')">Weekly</button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="updateChart('monthly')">Monthly</button>
             </div>
         </div>
-        
-        <div class="card dashboard-card mb-4">
-            <div class="card-header">
-                <i class="fas fa-table me-1"></i>
-                Top Performing URLs
+        <div id="clickTrendsChart" style="height: 400px;"></div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">Device Distribution</h3>
+                </div>
+                <div id="deviceChart" style="height: 300px;"></div>
             </div>
-            <div class="card-body">
-                {% if top_urls %}
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Short URL</th>
-                                    <th>Original URL</th>
-                                    <th>Clicks</th>
-                                    <th>Created</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for url in top_urls %}
-                                    <tr>
-                                        <td>
-                                            <a href="{% url 'shortener:redirect' url.short_code %}" target="_blank">
-                                                {{ request.get_host }}/{{ url.short_code }}
-                                            </a>
-                                        </td>
-                                        <td class="text-truncate" style="max-width: 200px;">
-                                            <a href="{{ url.original_url }}" target="_blank">
-                                                {{ url.original_url }}
-                                            </a>
-                                        </td>
-                                        <td>{{ url.clicks }}</td>
-                                        <td>{{ url.created_at|date:"M d, Y" }}</td>
-                                        <td>
-                                            <a href="{% url 'analytics:url_stats' url.short_code %}" class="btn btn-sm btn-primary">
-                                                <i class="fas fa-chart-bar me-1"></i>Details
-                                            </a>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="alert alert-info">
-                        <p class="mb-0">No URLs have been created yet.</p>
-                    </div>
-                {% endif %}
+        </div>
+        <div class="col-md-6">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3 class="chart-title">Peak Hours</h3>
+                </div>
+                <div id="peakHoursChart" style="height: 300px;"></div>
             </div>
         </div>
     </div>
-    
-    <div class="col-lg-4">
-        <div class="card dashboard-card mb-4">
-            <div class="card-header">
-                <i class="fas fa-history me-1"></i>
-                Recent Activity
-            </div>
-            <div class="card-body">
-                {% if recent_clicks %}
-                    <div class="recent-activity-list">
-                        {% for click in recent_clicks %}
-                            <div class="recent-activity-item">
-                                <div class="d-flex justify-content-between">
-                                    <div>
-                                        <strong>{{ click.url.short_code }}</strong> was clicked
-                                    </div>
-                                    <small class="text-muted">{{ click.timestamp|timesince }} ago</small>
-                                </div>
-                                <div class="mt-1 small">
-                                    <span class="badge bg-secondary">{{ click.device_type }}</span>
-                                    <span class="badge bg-secondary">{{ click.browser }}</span>
-                                    {% if click.country %}
-                                        <span class="badge bg-secondary">{{ click.country }}</span>
-                                    {% endif %}
-                                </div>
+
+    <div class="table-container">
+        <div class="table-header">
+            <h3 class="table-title">Top Performing URLs</h3>
+        </div>
+        <div class="table-responsive">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th>URL</th>
+                        <th>Short Code</th>
+                        <th>Clicks</th>
+                        <th>Unique Visitors</th>
+                        <th>Performance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for url in top_urls %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <img src="https://www.google.com/s2/favicons?domain={{ url.domain }}" alt="favicon" class="me-2">
+                                <a href="{% url 'analytics:url_stats' url.id %}" class="text-decoration-none">
+                                    {{ url.original_url|truncatechars:50 }}
+                                </a>
                             </div>
-                        {% endfor %}
-                    </div>
+                        </td>
+                        <td><code>{{ url.short_code }}</code></td>
+                        <td>{{ url.click_count }}</td>
+                        <td>{{ url.unique_visitors }}</td>
+                        <td>
+                            {% with performance=url.click_count|divide:stats.total_clicks %}
+                            <div class="badge {% if performance > 0.1 %}badge-success{% else %}badge-warning{% endif %}">
+                                {{ performance|multiply:100|floatformat:1 }}%
+                            </div>
+                            {% endwith %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if top_urls.has_other_pages %}
+        <div class="pagination">
+            {% if top_urls.has_previous %}
+            <a href="?page={{ top_urls.previous_page_number }}" class="page-link">&laquo;</a>
+            {% endif %}
+            
+            {% for num in top_urls.paginator.page_range %}
+                {% if top_urls.number == num %}
+                <a class="page-link active">{{ num }}</a>
                 {% else %}
-                    <div class="alert alert-info">
-                        <p class="mb-0">No recent activity to display.</p>
-                    </div>
+                <a href="?page={{ num }}" class="page-link">{{ num }}</a>
                 {% endif %}
-            </div>
+            {% endfor %}
+            
+            {% if top_urls.has_next %}
+            <a href="?page={{ top_urls.next_page_number }}" class="page-link">&raquo;</a>
+            {% endif %}
         </div>
-        
-        <div class="card dashboard-card mb-4">
-            <div class="card-header">
-                <i class="fas fa-brain me-1"></i>
-                AI Analytics Dashboard
-            </div>
-            <div class="card-body">
-                <p>Interactive AI-powered analytics dashboard:</p>
-                <div class="ratio ratio-16x9">
-                    {% plotly_app name="URLAnalyticsDashboard" ratio=0.65 %}
-                </div>
-            </div>
-        </div>
+        {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+// Initialize data from Django template
+const dashboardData = {
+    hourlyData: {{ hourly_data|default:'[]'|safe }},
+    deviceStats: {
+        desktop: {{ device_stats.desktop|default:0|safe }},
+        mobile: {{ device_stats.mobile|default:0|safe }},
+        tablet: {{ device_stats.tablet|default:0|safe }}
+    },
+    stats: {{ stats|default:'[]'|safe }},
+    engagementMetrics: {{ stats.engagement_metrics|default:'[]'|safe }}
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize charts
+    initClickTrendsChart(dashboardData.hourlyData);
+    initDeviceChart(dashboardData.deviceStats);
+    initPeakHoursChart(dashboardData.engagementMetrics.peak_hours || []);
+    
+    // Fetch real-time updates
+    setInterval(fetchUpdates, 30000);
+});
+
+function initClickTrendsChart(hourlyData) {
+    if (!hourlyData || !hourlyData.length) return;
+
+    const trace = {
+        x: hourlyData.map(d => d.hour),
+        y: hourlyData.map(d => d.clicks),
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Clicks',
+        line: {
+            color: 'rgb(75, 192, 192)',
+            width: 2
+        }
+    };
+
+    const chartLayout = {
+        margin: { t: 20, r: 20, b: 40, l: 40 },
+        showlegend: false,
+        xaxis: {
+            type: 'date',
+            rangeslider: { visible: false }
+        },
+        yaxis: {
+            title: 'Clicks'
+        }
+    };
+
+    Plotly.newPlot('clickTrendsChart', [trace], chartLayout);
+}
+
+function initDeviceChart(deviceStats) {
+    if (!deviceStats) return;
+
+    const data = [{
+        values: [deviceStats.desktop, deviceStats.mobile, deviceStats.tablet],
+        labels: ['Desktop', 'Mobile', 'Tablet'],
+        type: 'pie',
+        hole: 0.4,
+        marker: {
+            colors: ['rgb(54, 162, 235)', 'rgb(255, 99, 132)', 'rgb(255, 205, 86)']
+        }
+    }];
+
+    const chartLayout = {
+        margin: { t: 20, r: 20, b: 20, l: 20 },
+        showlegend: true,
+        legend: { orientation: 'h', y: -0.2 }
+    };
+
+    Plotly.newPlot('deviceChart', data, chartLayout);
+}
+
+function initPeakHoursChart(peakHours) {
+    if (!peakHours || !peakHours.length) return;
+
+    const trace = {
+        x: peakHours.map(h => h.hour),
+        y: peakHours.map(h => h.count),
+        type: 'bar',
+        marker: {
+            color: 'rgb(75, 192, 192)'
+        }
+    };
+
+    const chartLayout = {
+        margin: { t: 20, r: 20, b: 40, l: 40 },
+        showlegend: false,
+        xaxis: {
+            title: 'Hour of Day'
+        },
+        yaxis: {
+            title: 'Click Count'
+        }
+    };
+
+    Plotly.newPlot('peakHoursChart', [trace], chartLayout);
+}
+
+function updateClickTrendsChart(hourlyData) {
+    if (!hourlyData || !hourlyData.length) return;
+    
+    const trace = {
+        x: hourlyData.map(d => d.hour),
+        y: hourlyData.map(d => d.clicks),
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Clicks'
+    };
+    
+    Plotly.react('clickTrendsChart', [trace]);
+}
+
+function updateDeviceChart(deviceStats) {
+    if (!deviceStats) return;
+    
+    const data = [{
+        values: [deviceStats.desktop, deviceStats.mobile, deviceStats.tablet],
+        labels: ['Desktop', 'Mobile', 'Tablet'],
+        type: 'pie',
+        hole: 0.4
+    }];
+    
+    Plotly.react('deviceChart', data);
+}
+
+function updatePeakHoursChart(peakHours) {
+    if (!peakHours || !peakHours.length) return;
+    
+    const trace = {
+        x: peakHours.map(h => h.hour),
+        y: peakHours.map(h => h.count),
+        type: 'bar'
+    };
+    
+    Plotly.react('peakHoursChart', [trace]);
+}
+
+function fetchUpdates() {
+    fetch('/analytics/api/dashboard-stats/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateStats(data.data);
+            }
+        })
+        .catch(error => console.error('Error fetching updates:', error));
+}
+
+function updateStats(data) {
+    if (!data) return;
+
+    // Update statistics
+    const elements = {
+        totalUrls: document.querySelector('#totalUrls'),
+        totalClicks: document.querySelector('#totalClicks'),
+        todayClicks: document.querySelector('#todayClicks')
+    };
+
+    if (elements.totalUrls) elements.totalUrls.textContent = data.total_urls;
+    if (elements.totalClicks) elements.totalClicks.textContent = data.total_clicks;
+    if (elements.todayClicks) elements.todayClicks.textContent = data.today_clicks;
+    
+    // Update charts
+    if (data.hourly_data) updateClickTrendsChart(data.hourly_data);
+    if (data.device_stats) updateDeviceChart(data.device_stats);
+    if (data.engagement_metrics?.peak_hours) updatePeakHoursChart(data.engagement_metrics.peak_hours);
+}
+
+function updateChart(period) {
+    fetch(`/analytics/api/dashboard-stats/?period=${period}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.data.hourly_data) {
+                updateClickTrendsChart(data.data.hourly_data);
+            }
+        })
+        .catch(error => console.error('Error updating chart:', error));
+}
+</script>
 {% endblock %}

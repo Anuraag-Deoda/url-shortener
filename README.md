@@ -22,7 +22,7 @@ A modern URL shortening service built with Django that includes advanced analyti
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/url-shortener.git
+git clone https://github.com/Anuraag-Deoda/url-shortener.git
 cd url-shortener
 ```
 
