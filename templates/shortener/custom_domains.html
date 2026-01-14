@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+
+{% block title %}Custom Domains{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0"><i class="fas fa-globe me-2"></i>Custom Domains</h4>
+                <a href="{% url 'shortener:custom_domain_add' %}" class="btn btn-primary btn-sm">
+                    <i class="fas fa-plus me-1"></i>Add Domain
+                </a>
+            </div>
+            <div class="card-body">
+                {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+                {% endif %}
+
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Custom domains</strong> allow you to use your own domain for shortened URLs (e.g., links.yourbrand.com/abc123).
+                </div>
+
+                {% if domains %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Domain</th>
+                                <th>Status</th>
+                                <th>SSL</th>
+                                <th>Added</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for domain in domains %}
+                            <tr>
+                                <td>
+                                    <strong>{{ domain.domain }}</strong>
+                                </td>
+                                <td>
+                                    {% if domain.verification_status == 'verified' %}
+                                    <span class="badge bg-success"><i class="fas fa-check me-1"></i>Verified</span>
+                                    {% elif domain.verification_status == 'pending' %}
+                                    <span class="badge bg-warning text-dark"><i class="fas fa-clock me-1"></i>Pending</span>
+                                    {% else %}
+                                    <span class="badge bg-danger"><i class="fas fa-times me-1"></i>Failed</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if domain.ssl_enabled %}
+                                    <span class="badge bg-success">Enabled</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Disabled</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ domain.created_at|date:"M d, Y" }}</td>
+                                <td>
+                                    {% if domain.verification_status != 'verified' %}
+                                    <a href="{% url 'shortener:verify_domain' domain.pk %}" class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-sync me-1"></i>Verify
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% if domain.verification_status == 'pending' %}
+                            <tr>
+                                <td colspan="5" class="bg-light">
+                                    <small class="text-muted">
+                                        <strong>To verify this domain:</strong><br>
+                                        1. Add a TXT record to your DNS: <code>{{ domain.get_dns_txt_record }}</code><br>
+                                        2. Add a CNAME record pointing to: <code>{{ domain.get_cname_target }}</code><br>
+                                        3. Click "Verify" once DNS changes propagate (may take up to 48 hours)
+                                    </small>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-globe fa-3x text-muted mb-3"></i>
+                    <h5>No custom domains yet</h5>
+                    <p class="text-muted">Add a custom domain to use your own branding for shortened URLs.</p>
+                    <a href="{% url 'shortener:custom_domain_add' %}" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Add Your First Domain
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

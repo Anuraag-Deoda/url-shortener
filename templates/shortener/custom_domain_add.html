@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+
+{% block title %}Add Custom Domain{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0"><i class="fas fa-plus me-2"></i>Add Custom Domain</h4>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Before adding a domain:</strong> Make sure you have access to your domain's DNS settings. You'll need to add DNS records to verify ownership.
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="mb-4">
+                        <label for="id_domain" class="form-label"><strong>Domain Name</strong></label>
+                        <input type="text" name="domain" id="id_domain" class="form-control form-control-lg"
+                               placeholder="links.yourbrand.com" required>
+                        <div class="form-text">Enter the domain or subdomain you want to use (e.g., links.example.com)</div>
+                    </div>
+
+                    <div class="card bg-light mb-4">
+                        <div class="card-body">
+                            <h6><i class="fas fa-list-ol me-2"></i>Verification Steps</h6>
+                            <ol class="mb-0 small">
+                                <li>Add the domain above and click "Add Domain"</li>
+                                <li>Copy the TXT record provided and add it to your DNS</li>
+                                <li>Add a CNAME record pointing to our server</li>
+                                <li>Wait for DNS propagation (usually 15 minutes to 48 hours)</li>
+                                <li>Click "Verify" to complete the process</li>
+                            </ol>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'shortener:custom_domains' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus me-1"></i>Add Domain
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
