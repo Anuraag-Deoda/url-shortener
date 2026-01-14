@@ -1,22 +1,34 @@
 import random
+import hashlib
+from datetime import timedelta
+from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
-from django.views.generic import ListView, CreateView, DetailView, UpdateView
+from django.views.generic import ListView, CreateView, DetailView, UpdateView, DeleteView, TemplateView
 from django.urls import reverse_lazy, reverse
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.forms import inlineformset_factory
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
+from django.db.models import Count, Sum, Avg, Q
+from django.db.models.functions import TruncDate, TruncHour
 from .models import (
     URL, ClickData, DeviceTarget, RotationGroup,
     RotationURL, CustomDomain, DomainURL, TimeSchedule,
-    Funnel, FunnelStep, FunnelEvent, LinkAccessLog
+    Funnel, FunnelStep, FunnelEvent, LinkAccessLog,
+    Campaign, CampaignURL, ABTest, ABTestVariant,
+    Cohort, ClickFraudRule, FraudAlert, Attribution
 )
 from .forms import URLShortenerForm
 from .services.geolocation import GeoLocationService
 from .services.qrcode_service import QRCodeService
 from .services.domain_verification import DomainVerificationService
 from .services.realtime import RealTimeAnalyticsService
+from .services.analytics_service import (
+    CampaignAnalyticsService, CohortAnalyticsService,
+    ABTestAnalyticsService, AttributionService
+)
+from .services.fraud_detection import FraudDetectionService, RealTimeFraudMonitor
 import user_agents
 
 
@@ -716,3 +728,571 @@ def api_clicks_per_minute(request):
     minutes = int(request.GET.get('minutes', 60))
     data = RealTimeAnalyticsService.get_clicks_per_minute(minutes)
     return JsonResponse({'success': True, 'data': data})
+
+
+# ============= Campaign Management Views =============
+
+class CampaignListView(ListView):
+    """List all marketing campaigns"""
+    model = Campaign
+    template_name = 'shortener/campaign_list.html'
+    context_object_name = 'campaigns'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Add summary stats for each campaign
+        for campaign in context['campaigns']:
+            campaign.stats = {
+                'total_clicks': campaign.get_total_clicks(),
+                'unique_visitors': campaign.get_unique_visitors(),
+                'conversions': campaign.get_conversion_count(),
+                'revenue': campaign.get_total_revenue(),
+                'roi': campaign.get_roi(),
+            }
+        return context
+
+
+class CampaignCreateView(CreateView):
+    """Create a new campaign"""
+    model = Campaign
+    template_name = 'shortener/campaign_form.html'
+    fields = ['name', 'description', 'utm_source', 'utm_medium', 'utm_campaign',
+              'budget', 'currency', 'start_date', 'end_date']
+    success_url = reverse_lazy('shortener:campaign_list')
+
+    def form_valid(self, form):
+        messages.success(self.request, 'Campaign created successfully.')
+        return super().form_valid(form)
+
+
+class CampaignDetailView(DetailView):
+    """Campaign analytics dashboard"""
+    model = Campaign
+    template_name = 'shortener/campaign_detail.html'
+    context_object_name = 'campaign'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        days = int(self.request.GET.get('days', 30))
+        context['performance'] = CampaignAnalyticsService.get_campaign_performance(
+            self.object, days
+        )
+        context['days'] = days
+        context['urls'] = self.object.urls.all()
+        return context
+
+
+class CampaignEditView(UpdateView):
+    """Edit campaign"""
+    model = Campaign
+    template_name = 'shortener/campaign_form.html'
+    fields = ['name', 'description', 'utm_source', 'utm_medium', 'utm_campaign',
+              'budget', 'spent', 'currency', 'start_date', 'end_date', 'is_active']
+
+    def get_success_url(self):
+        return reverse('shortener:campaign_detail', kwargs={'pk': self.object.pk})
+
+
+CampaignURLFormSet = inlineformset_factory(
+    Campaign, CampaignURL,
+    fields=['url', 'utm_source', 'utm_medium', 'utm_content', 'utm_term'],
+    extra=2,
+    can_delete=True,
+)
+
+
+class CampaignURLsView(UpdateView):
+    """Manage URLs in a campaign"""
+    model = Campaign
+    template_name = 'shortener/campaign_urls.html'
+    fields = []
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.POST:
+            context['formset'] = CampaignURLFormSet(self.request.POST, instance=self.object)
+        else:
+            context['formset'] = CampaignURLFormSet(instance=self.object)
+        context['all_urls'] = URL.objects.all()
+        return context
+
+    def form_valid(self, form):
+        context = self.get_context_data()
+        formset = context['formset']
+        if formset.is_valid():
+            formset.save()
+            messages.success(self.request, 'Campaign URLs updated.')
+            return redirect('shortener:campaign_detail', pk=self.object.pk)
+        return self.render_to_response(context)
+
+
+def api_campaign_compare(request):
+    """API: Compare multiple campaigns"""
+    campaign_ids = request.GET.getlist('ids')
+    days = int(request.GET.get('days', 30))
+
+    if not campaign_ids:
+        return JsonResponse({'success': False, 'error': 'No campaign IDs provided'}, status=400)
+
+    try:
+        ids = [int(id) for id in campaign_ids]
+    except ValueError:
+        return JsonResponse({'success': False, 'error': 'Invalid campaign IDs'}, status=400)
+
+    results = CampaignAnalyticsService.compare_campaigns(ids, days)
+    return JsonResponse({'success': True, 'data': results})
+
+
+# ============= A/B Test Views =============
+
+class ABTestListView(ListView):
+    """List all A/B tests"""
+    model = ABTest
+    template_name = 'shortener/abtest_list.html'
+    context_object_name = 'tests'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        for test in context['tests']:
+            test.visitors = test.get_total_visitors()
+            test.is_significant = test.is_statistically_significant()
+        return context
+
+
+class ABTestCreateView(CreateView):
+    """Create a new A/B test"""
+    model = ABTest
+    template_name = 'shortener/abtest_form.html'
+    fields = ['name', 'description', 'url', 'goal_type', 'confidence_level', 'minimum_sample_size']
+    success_url = reverse_lazy('shortener:abtest_list')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['urls'] = URL.objects.all()
+        return context
+
+
+ABTestVariantFormSet = inlineformset_factory(
+    ABTest, ABTestVariant,
+    fields=['name', 'destination_url', 'weight', 'is_control'],
+    extra=2,
+    can_delete=True,
+)
+
+
+class ABTestDetailView(DetailView):
+    """A/B test results dashboard"""
+    model = ABTest
+    template_name = 'shortener/abtest_detail.html'
+    context_object_name = 'test'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['results'] = ABTestAnalyticsService.get_test_results(self.object)
+        return context
+
+
+class ABTestEditView(UpdateView):
+    """Edit A/B test variants"""
+    model = ABTest
+    template_name = 'shortener/abtest_edit.html'
+    fields = ['name', 'description', 'status', 'goal_type', 'confidence_level', 'minimum_sample_size']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.POST:
+            context['variant_formset'] = ABTestVariantFormSet(self.request.POST, instance=self.object)
+        else:
+            context['variant_formset'] = ABTestVariantFormSet(instance=self.object)
+        return context
+
+    def form_valid(self, form):
+        context = self.get_context_data()
+        formset = context['variant_formset']
+        if formset.is_valid():
+            self.object = form.save()
+            formset.save()
+            messages.success(self.request, 'A/B test updated.')
+            return redirect('shortener:abtest_detail', pk=self.object.pk)
+        return self.render_to_response(context)
+
+
+def abtest_start(request, pk):
+    """Start an A/B test"""
+    test = get_object_or_404(ABTest, pk=pk)
+    if test.variants.count() < 2:
+        messages.error(request, 'A/B test needs at least 2 variants to start.')
+    else:
+        test.status = 'running'
+        test.start_date = timezone.now()
+        test.save()
+        messages.success(request, f'A/B test "{test.name}" started.')
+    return redirect('shortener:abtest_detail', pk=pk)
+
+
+def abtest_stop(request, pk):
+    """Stop an A/B test"""
+    test = get_object_or_404(ABTest, pk=pk)
+    test.status = 'completed'
+    test.end_date = timezone.now()
+
+    # Determine winner if significant
+    winner = test.determine_winner()
+    if winner:
+        test.winner_variant = winner
+
+    test.save()
+    messages.success(request, f'A/B test "{test.name}" completed.')
+    return redirect('shortener:abtest_detail', pk=pk)
+
+
+def api_abtest_sample_size(request):
+    """API: Calculate required sample size"""
+    baseline_rate = float(request.GET.get('baseline', 0.05))
+    mde = float(request.GET.get('mde', 0.1))  # Minimum detectable effect
+    confidence = float(request.GET.get('confidence', 0.95))
+
+    sample_size = ABTestAnalyticsService.calculate_sample_size(
+        baseline_rate, mde, confidence
+    )
+
+    return JsonResponse({
+        'success': True,
+        'sample_size': sample_size,
+        'total_needed': sample_size * 2  # For 2 variants
+    })
+
+
+# ============= Cohort Analysis Views =============
+
+class CohortListView(ListView):
+    """List all cohorts"""
+    model = Cohort
+    template_name = 'shortener/cohort_list.html'
+    context_object_name = 'cohorts'
+
+
+class CohortCreateView(CreateView):
+    """Create a new cohort"""
+    model = Cohort
+    template_name = 'shortener/cohort_form.html'
+    fields = ['name', 'cohort_type', 'description', 'criteria']
+    success_url = reverse_lazy('shortener:cohort_list')
+
+
+class CohortDetailView(DetailView):
+    """Cohort analysis dashboard"""
+    model = Cohort
+    template_name = 'shortener/cohort_detail.html'
+    context_object_name = 'cohort'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['analysis'] = CohortAnalyticsService.analyze_cohort(self.object)
+        return context
+
+
+class RetentionDashboardView(TemplateView):
+    """Retention cohort analysis dashboard"""
+    template_name = 'shortener/retention_dashboard.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        days = int(self.request.GET.get('days', 60))
+        period = self.request.GET.get('period', 'week')
+
+        start_date = timezone.now() - timedelta(days=days)
+        end_date = timezone.now()
+
+        context['retention_data'] = CohortAnalyticsService.generate_retention_cohorts(
+            start_date, end_date, period
+        )
+        context['days'] = days
+        context['period'] = period
+        return context
+
+
+def api_retention_cohorts(request):
+    """API: Get retention cohort data"""
+    days = int(request.GET.get('days', 60))
+    period = request.GET.get('period', 'week')
+
+    start_date = timezone.now() - timedelta(days=days)
+    end_date = timezone.now()
+
+    data = CohortAnalyticsService.generate_retention_cohorts(start_date, end_date, period)
+
+    # Convert dates to strings for JSON
+    for cohort in data.get('cohorts', []):
+        cohort['cohort_date'] = str(cohort['cohort_date'])
+
+    return JsonResponse({'success': True, 'data': data})
+
+
+# ============= Fraud Detection Views =============
+
+class FraudDashboardView(TemplateView):
+    """Fraud detection dashboard"""
+    template_name = 'shortener/fraud_dashboard.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        days = int(self.request.GET.get('days', 7))
+
+        service = FraudDetectionService()
+        context['summary'] = service.get_fraud_summary(days)
+        context['recent_alerts'] = FraudAlert.objects.all()[:20]
+        context['rules'] = ClickFraudRule.objects.all()
+        context['recommendations'] = service.get_recommended_rules()
+        context['days'] = days
+        return context
+
+
+class FraudRuleListView(ListView):
+    """List fraud detection rules"""
+    model = ClickFraudRule
+    template_name = 'shortener/fraud_rules.html'
+    context_object_name = 'rules'
+
+
+class FraudRuleCreateView(CreateView):
+    """Create a fraud detection rule"""
+    model = ClickFraudRule
+    template_name = 'shortener/fraud_rule_form.html'
+    fields = ['name', 'rule_type', 'action', 'parameters', 'redirect_url', 'priority', 'is_active']
+    success_url = reverse_lazy('shortener:fraud_rules')
+
+
+class FraudRuleEditView(UpdateView):
+    """Edit fraud detection rule"""
+    model = ClickFraudRule
+    template_name = 'shortener/fraud_rule_form.html'
+    fields = ['name', 'rule_type', 'action', 'parameters', 'redirect_url', 'priority', 'is_active']
+    success_url = reverse_lazy('shortener:fraud_rules')
+
+
+class FraudAlertListView(ListView):
+    """List fraud alerts"""
+    model = FraudAlert
+    template_name = 'shortener/fraud_alerts.html'
+    context_object_name = 'alerts'
+    paginate_by = 50
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        status = self.request.GET.get('status')
+        severity = self.request.GET.get('severity')
+
+        if status:
+            queryset = queryset.filter(status=status)
+        if severity:
+            queryset = queryset.filter(severity=severity)
+
+        return queryset
+
+
+def fraud_alert_update_status(request, pk):
+    """Update fraud alert status"""
+    alert = get_object_or_404(FraudAlert, pk=pk)
+    new_status = request.POST.get('status')
+
+    if new_status in ['new', 'investigating', 'confirmed', 'dismissed']:
+        alert.status = new_status
+        if new_status in ['confirmed', 'dismissed']:
+            alert.resolved_at = timezone.now()
+        alert.save()
+        messages.success(request, f'Alert status updated to {new_status}.')
+
+    return redirect('shortener:fraud_alerts')
+
+
+def api_fraud_ip_analysis(request):
+    """API: Analyze IP for fraud patterns"""
+    ip_address = request.GET.get('ip')
+    if not ip_address:
+        return JsonResponse({'success': False, 'error': 'IP address required'}, status=400)
+
+    service = FraudDetectionService()
+    analysis = service.analyze_ip(ip_address)
+
+    # Convert dates to strings
+    if analysis.get('first_seen'):
+        analysis['first_seen'] = analysis['first_seen'].isoformat()
+    if analysis.get('last_seen'):
+        analysis['last_seen'] = analysis['last_seen'].isoformat()
+
+    return JsonResponse({'success': True, 'data': analysis})
+
+
+# ============= Attribution Views =============
+
+class AttributionDashboardView(TemplateView):
+    """Multi-touch attribution dashboard"""
+    template_name = 'shortener/attribution_dashboard.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        days = int(self.request.GET.get('days', 30))
+        model = self.request.GET.get('model', 'linear')
+
+        start_date = timezone.now() - timedelta(days=days)
+        end_date = timezone.now()
+
+        context['channel_attribution'] = AttributionService.get_channel_attribution(
+            start_date, end_date, model
+        )
+        context['days'] = days
+        context['model'] = model
+        context['models'] = [
+            ('first_touch', 'First Touch'),
+            ('last_touch', 'Last Touch'),
+            ('linear', 'Linear'),
+            ('time_decay', 'Time Decay'),
+            ('position_based', 'Position Based'),
+        ]
+
+        # Recent conversions
+        context['recent_conversions'] = Attribution.objects.all()[:20]
+
+        return context
+
+
+def api_attribution_by_model(request):
+    """API: Get attribution by different models"""
+    days = int(request.GET.get('days', 30))
+
+    start_date = timezone.now() - timedelta(days=days)
+    end_date = timezone.now()
+
+    models_data = {}
+    for model in ['first_touch', 'last_touch', 'linear', 'time_decay', 'position_based']:
+        models_data[model] = AttributionService.get_channel_attribution(
+            start_date, end_date, model
+        )
+
+    return JsonResponse({'success': True, 'data': models_data})
+
+
+def record_conversion(request):
+    """API: Record a conversion for attribution"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
+
+    visitor_id = request.POST.get('visitor_id')
+    value = request.POST.get('value')
+    currency = request.POST.get('currency', 'USD')
+
+    if not visitor_id or not value:
+        return JsonResponse({
+            'success': False,
+            'error': 'visitor_id and value required'
+        }, status=400)
+
+    try:
+        conversion_value = Decimal(value)
+    except Exception:
+        return JsonResponse({'success': False, 'error': 'Invalid value'}, status=400)
+
+    attribution = AttributionService.create_attribution_record(
+        visitor_id, conversion_value, currency
+    )
+
+    return JsonResponse({
+        'success': True,
+        'attribution_id': attribution.id,
+        'conversion_id': attribution.conversion_id
+    })
+
+
+# ============= Advanced Analytics Dashboard =============
+
+class AdvancedAnalyticsDashboardView(TemplateView):
+    """Main advanced analytics dashboard"""
+    template_name = 'shortener/advanced_analytics.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        days = int(self.request.GET.get('days', 30))
+        start_date = timezone.now() - timedelta(days=days)
+
+        # Summary statistics
+        clicks = ClickData.objects.filter(timestamp__gte=start_date)
+
+        context['summary'] = {
+            'total_clicks': clicks.count(),
+            'unique_visitors': clicks.values('visitor_id').distinct().count(),
+            'conversions': clicks.filter(conversion_value__isnull=False).count(),
+            'total_revenue': float(clicks.aggregate(Sum('conversion_value'))['conversion_value__sum'] or 0),
+            'bot_clicks': clicks.filter(is_bot=True).count(),
+        }
+
+        # Top campaigns
+        context['top_campaigns'] = clicks.exclude(
+            utm_campaign__isnull=True
+        ).exclude(utm_campaign='').values('utm_campaign').annotate(
+            clicks=Count('id'),
+            visitors=Count('visitor_id', distinct=True)
+        ).order_by('-clicks')[:10]
+
+        # Top sources
+        context['top_sources'] = clicks.exclude(
+            utm_source__isnull=True
+        ).exclude(utm_source='').values('utm_source').annotate(
+            clicks=Count('id'),
+            visitors=Count('visitor_id', distinct=True)
+        ).order_by('-clicks')[:10]
+
+        # Fraud summary
+        context['fraud_summary'] = FraudDetectionService().get_fraud_summary(days)
+
+        # Active A/B tests
+        context['active_tests'] = ABTest.objects.filter(status='running')[:5]
+
+        # Recent alerts
+        context['recent_alerts'] = FraudAlert.objects.filter(status='new')[:5]
+
+        context['days'] = days
+        return context
+
+
+# ============= UTM Builder =============
+
+def utm_builder(request):
+    """UTM parameter builder tool"""
+    return render(request, 'shortener/utm_builder.html', {
+        'urls': URL.objects.all()[:50]
+    })
+
+
+def api_generate_utm_url(request):
+    """API: Generate URL with UTM parameters"""
+    base_url = request.GET.get('url', '')
+    utm_source = request.GET.get('utm_source', '')
+    utm_medium = request.GET.get('utm_medium', '')
+    utm_campaign = request.GET.get('utm_campaign', '')
+    utm_term = request.GET.get('utm_term', '')
+    utm_content = request.GET.get('utm_content', '')
+
+    if not base_url:
+        return JsonResponse({'success': False, 'error': 'URL required'}, status=400)
+
+    from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
+
+    parsed = urlparse(base_url)
+    params = parse_qs(parsed.query)
+
+    if utm_source:
+        params['utm_source'] = [utm_source]
+    if utm_medium:
+        params['utm_medium'] = [utm_medium]
+    if utm_campaign:
+        params['utm_campaign'] = [utm_campaign]
+    if utm_term:
+        params['utm_term'] = [utm_term]
+    if utm_content:
+        params['utm_content'] = [utm_content]
+
+    new_query = urlencode(params, doseq=True)
+    final_url = urlunparse(parsed._replace(query=new_query))
+
+    return JsonResponse({'success': True, 'url': final_url})

@@ -44,6 +44,51 @@ urlpatterns = [
     # Gate (password/captcha)
     path('gate/<str:short_code>/', views.gate_view, name='gate'),
 
+    # ============= Advanced Analytics =============
+
+    # Campaign Management
+    path('campaigns/', views.CampaignListView.as_view(), name='campaign_list'),
+    path('campaigns/create/', views.CampaignCreateView.as_view(), name='campaign_create'),
+    path('campaigns/<int:pk>/', views.CampaignDetailView.as_view(), name='campaign_detail'),
+    path('campaigns/<int:pk>/edit/', views.CampaignEditView.as_view(), name='campaign_edit'),
+    path('campaigns/<int:pk>/urls/', views.CampaignURLsView.as_view(), name='campaign_urls'),
+    path('api/campaigns/compare/', views.api_campaign_compare, name='api_campaign_compare'),
+
+    # A/B Testing
+    path('ab-tests/', views.ABTestListView.as_view(), name='abtest_list'),
+    path('ab-tests/create/', views.ABTestCreateView.as_view(), name='abtest_create'),
+    path('ab-tests/<int:pk>/', views.ABTestDetailView.as_view(), name='abtest_detail'),
+    path('ab-tests/<int:pk>/edit/', views.ABTestEditView.as_view(), name='abtest_edit'),
+    path('ab-tests/<int:pk>/start/', views.abtest_start, name='abtest_start'),
+    path('ab-tests/<int:pk>/stop/', views.abtest_stop, name='abtest_stop'),
+    path('api/ab-tests/sample-size/', views.api_abtest_sample_size, name='api_abtest_sample_size'),
+
+    # Cohort Analysis
+    path('cohorts/', views.CohortListView.as_view(), name='cohort_list'),
+    path('cohorts/create/', views.CohortCreateView.as_view(), name='cohort_create'),
+    path('cohorts/<int:pk>/', views.CohortDetailView.as_view(), name='cohort_detail'),
+    path('retention/', views.RetentionDashboardView.as_view(), name='retention_dashboard'),
+    path('api/retention/', views.api_retention_cohorts, name='api_retention_cohorts'),
+
+    # Fraud Detection
+    path('fraud/', views.FraudDashboardView.as_view(), name='fraud_dashboard'),
+    path('fraud/rules/', views.FraudRuleListView.as_view(), name='fraud_rules'),
+    path('fraud/rules/create/', views.FraudRuleCreateView.as_view(), name='fraud_rule_create'),
+    path('fraud/rules/<int:pk>/edit/', views.FraudRuleEditView.as_view(), name='fraud_rule_edit'),
+    path('fraud/alerts/', views.FraudAlertListView.as_view(), name='fraud_alerts'),
+    path('fraud/alerts/<int:pk>/status/', views.fraud_alert_update_status, name='fraud_alert_status'),
+    path('api/fraud/ip-analysis/', views.api_fraud_ip_analysis, name='api_fraud_ip_analysis'),
+
+    # Attribution
+    path('attribution/', views.AttributionDashboardView.as_view(), name='attribution_dashboard'),
+    path('api/attribution/by-model/', views.api_attribution_by_model, name='api_attribution_by_model'),
+    path('api/attribution/conversion/', views.record_conversion, name='api_record_conversion'),
+
+    # Advanced Analytics Dashboard
+    path('analytics/advanced/', views.AdvancedAnalyticsDashboardView.as_view(), name='advanced_analytics'),
+    path('utm-builder/', views.utm_builder, name='utm_builder'),
+    path('api/utm/generate/', views.api_generate_utm_url, name='api_generate_utm'),
+
     # Redirect (must be last - catches all short codes)
     path('<str:short_code>/', views.redirect_to_original, name='redirect'),
 ]
