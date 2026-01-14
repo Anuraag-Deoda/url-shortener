@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+
+{% block title %}Time-Based Redirects - {{ object.short_code }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'shortener:home' %}">Home</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'shortener:success' object.pk %}">{{ object.short_code }}</a></li>
+                    <li class="breadcrumb-item active">Time-Based Redirects</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Time-Based Redirects</h5>
+            <span class="badge bg-light text-primary">
+                Current: {{ current_time|date:"l, H:i" }} UTC
+            </span>
+        </div>
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+
+                <div class="form-check form-switch mb-4">
+                    <input type="checkbox" name="enable_time_based" class="form-check-input"
+                           id="enableTimeBased" {% if object.enable_time_based %}checked{% endif %}>
+                    <label class="form-check-label" for="enableTimeBased">
+                        <strong>Enable Time-Based Redirects</strong>
+                    </label>
+                </div>
+
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Schedule different destination URLs based on time of day, day of week, or date range.
+                    Useful for business hours redirects, promotional campaigns, or regional time zones.
+                </div>
+
+                {{ formset.management_form }}
+
+                <div class="table-responsive">
+                    <table class="table table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 200px;">Label</th>
+                                <th>Destination URL</th>
+                                <th style="width: 100px;">Start Time</th>
+                                <th style="width: 100px;">End Time</th>
+                                <th style="width: 120px;">Date Range</th>
+                                <th style="width: 150px;">Weekdays</th>
+                                <th style="width: 100px;">Timezone</th>
+                                <th style="width: 70px;">Priority</th>
+                                <th style="width: 60px;">Active</th>
+                                <th style="width: 50px;">Delete</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for form in formset %}
+                            <tr>
+                                {{ form.id }}
+                                <td>
+                                    {{ form.label }}
+                                    <small class="d-block text-muted">e.g., "Business Hours"</small>
+                                </td>
+                                <td>{{ form.destination_url }}</td>
+                                <td>{{ form.start_time }}</td>
+                                <td>{{ form.end_time }}</td>
+                                <td>
+                                    <div class="mb-1">{{ form.start_date }}</div>
+                                    <div>{{ form.end_date }}</div>
+                                </td>
+                                <td>
+                                    {{ form.weekdays }}
+                                    <small class="d-block text-muted">0=Mon, 6=Sun</small>
+                                </td>
+                                <td>{{ form.timezone_name }}</td>
+                                <td>{{ form.priority }}</td>
+                                <td class="text-center">{{ form.is_active }}</td>
+                                <td class="text-center">{{ form.DELETE }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6>Example Configurations:</h6>
+                                <ul class="small mb-0">
+                                    <li><strong>Business Hours:</strong> 09:00-17:00, Mon-Fri (0,1,2,3,4)</li>
+                                    <li><strong>Weekend:</strong> All day, Sat-Sun (5,6)</li>
+                                    <li><strong>Night Shift:</strong> 22:00-06:00 (overnight)</li>
+                                    <li><strong>Promo Period:</strong> Set date range for campaign</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6>Priority Order:</h6>
+                                <p class="small mb-0">
+                                    Higher priority schedules are checked first. If multiple schedules match,
+                                    the one with highest priority wins. If no schedule matches, the original
+                                    URL is used.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between mt-4">
+                    <a href="{% url 'shortener:success' object.pk %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Back
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Save Schedules
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .table input[type="text"],
+    .table input[type="url"],
+    .table input[type="time"],
+    .table input[type="date"],
+    .table input[type="number"],
+    .table select {
+        width: 100%;
+        padding: 0.375rem;
+        font-size: 0.875rem;
+    }
+</style>
+{% endblock %}
