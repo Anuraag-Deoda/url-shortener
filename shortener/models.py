@@ -180,6 +180,23 @@ class ClickData(models.Model):
     region = models.CharField(max_length=100, blank=True, null=True)
     timezone_name = models.CharField(max_length=50, blank=True, null=True)
 
+    # UTM Parameters for campaign tracking
+    utm_source = models.CharField(max_length=100, blank=True, null=True, db_index=True)
+    utm_medium = models.CharField(max_length=100, blank=True, null=True, db_index=True)
+    utm_campaign = models.CharField(max_length=100, blank=True, null=True, db_index=True)
+    utm_term = models.CharField(max_length=100, blank=True, null=True)
+    utm_content = models.CharField(max_length=100, blank=True, null=True)
+
+    # Session and visitor tracking
+    session_id = models.CharField(max_length=64, blank=True, null=True, db_index=True)
+    visitor_id = models.CharField(max_length=64, blank=True, null=True, db_index=True)
+    is_unique = models.BooleanField(default=True)  # First visit from this visitor
+    is_bot = models.BooleanField(default=False)
+
+    # Conversion tracking
+    conversion_value = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    conversion_currency = models.CharField(max_length=3, default='USD')
+
     # Tracking which URL was served (for device targeting/rotation)
     served_url = models.URLField(max_length=500, blank=True, null=True)
     device_target = models.ForeignKey(
@@ -191,8 +208,23 @@ class ClickData(models.Model):
         null=True, blank=True, related_name='click_data'
     )
 
+    # A/B test tracking
+    ab_test = models.ForeignKey(
+        'ABTest', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='clicks'
+    )
+    ab_variant = models.ForeignKey(
+        'ABTestVariant', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='clicks'
+    )
+
     class Meta:
         ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['url', 'timestamp']),
+            models.Index(fields=['visitor_id', 'timestamp']),
+            models.Index(fields=['utm_campaign', 'timestamp']),
+        ]
 
     def __str__(self):
         return f"Click on {self.url.short_code} at {self.timestamp}"
@@ -589,3 +621,590 @@ class LinkAccessLog(models.Model):
 
     def __str__(self):
         return f"{self.url.short_code}: {self.access_type} at {self.timestamp}"
+
+
+# ============= Advanced Analytics Models =============
+
+class Campaign(models.Model):
+    """Marketing campaign for tracking UTM parameters"""
+
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+
+    # UTM defaults for this campaign
+    utm_source = models.CharField(max_length=100, blank=True)
+    utm_medium = models.CharField(max_length=100, blank=True)
+    utm_campaign = models.CharField(max_length=100)
+
+    # Budget tracking
+    budget = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    spent = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    currency = models.CharField(max_length=3, default='USD')
+
+    # Date range
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
+
+    def get_total_clicks(self):
+        return ClickData.objects.filter(utm_campaign=self.utm_campaign).count()
+
+    def get_unique_visitors(self):
+        return ClickData.objects.filter(
+            utm_campaign=self.utm_campaign
+        ).values('visitor_id').distinct().count()
+
+    def get_conversion_count(self):
+        return ClickData.objects.filter(
+            utm_campaign=self.utm_campaign,
+            conversion_value__isnull=False
+        ).count()
+
+    def get_total_revenue(self):
+        result = ClickData.objects.filter(
+            utm_campaign=self.utm_campaign
+        ).aggregate(total=models.Sum('conversion_value'))
+        return result['total'] or 0
+
+    def get_roi(self):
+        if not self.spent or self.spent == 0:
+            return None
+        revenue = self.get_total_revenue()
+        return round(((revenue - float(self.spent)) / float(self.spent)) * 100, 2)
+
+
+class CampaignURL(models.Model):
+    """Links associated with a campaign"""
+
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='urls')
+    url = models.ForeignKey(URL, on_delete=models.CASCADE, related_name='campaigns')
+    utm_source = models.CharField(max_length=100, blank=True)
+    utm_medium = models.CharField(max_length=100, blank=True)
+    utm_content = models.CharField(max_length=100, blank=True)
+    utm_term = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['campaign', 'url']
+
+    def __str__(self):
+        return f"{self.campaign.name} - {self.url.short_code}"
+
+    def get_utm_url(self):
+        """Generate full URL with UTM parameters"""
+        from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
+
+        base_url = self.url.original_url
+        parsed = urlparse(base_url)
+
+        # Build UTM params
+        utm_params = {}
+        if self.utm_source or self.campaign.utm_source:
+            utm_params['utm_source'] = self.utm_source or self.campaign.utm_source
+        if self.utm_medium or self.campaign.utm_medium:
+            utm_params['utm_medium'] = self.utm_medium or self.campaign.utm_medium
+        if self.campaign.utm_campaign:
+            utm_params['utm_campaign'] = self.campaign.utm_campaign
+        if self.utm_content:
+            utm_params['utm_content'] = self.utm_content
+        if self.utm_term:
+            utm_params['utm_term'] = self.utm_term
+
+        # Merge with existing query params
+        existing_params = parse_qs(parsed.query)
+        existing_params.update(utm_params)
+
+        new_query = urlencode(existing_params, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
+
+
+class ABTest(models.Model):
+    """A/B Test configuration"""
+
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('running', 'Running'),
+        ('paused', 'Paused'),
+        ('completed', 'Completed'),
+    ]
+
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    url = models.ForeignKey(URL, on_delete=models.CASCADE, related_name='ab_tests')
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    start_date = models.DateTimeField(null=True, blank=True)
+    end_date = models.DateTimeField(null=True, blank=True)
+
+    # Statistical settings
+    confidence_level = models.FloatField(default=0.95, help_text="e.g., 0.95 for 95%")
+    minimum_sample_size = models.PositiveIntegerField(default=100)
+
+    # Goal tracking
+    goal_type = models.CharField(max_length=50, default='clicks', choices=[
+        ('clicks', 'Click-through Rate'),
+        ('conversions', 'Conversion Rate'),
+        ('revenue', 'Revenue per Click'),
+        ('bounce', 'Bounce Rate'),
+    ])
+
+    winner_variant = models.ForeignKey(
+        'ABTestVariant', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='won_tests'
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.status})"
+
+    def get_total_visitors(self):
+        return self.clicks.values('visitor_id').distinct().count()
+
+    def is_statistically_significant(self):
+        """Check if test has reached statistical significance"""
+        variants = self.variants.all()
+        if variants.count() < 2:
+            return False
+
+        # Check minimum sample size
+        for variant in variants:
+            if variant.get_visitors() < self.minimum_sample_size:
+                return False
+
+        # Perform chi-square test
+        return self._perform_significance_test()
+
+    def _perform_significance_test(self):
+        """Perform chi-square test for significance"""
+        from scipy import stats
+        import numpy as np
+
+        variants = list(self.variants.all())
+        if len(variants) < 2:
+            return False
+
+        # Build contingency table
+        observed = []
+        for variant in variants:
+            visitors = variant.get_visitors()
+            conversions = variant.get_conversions()
+            observed.append([conversions, visitors - conversions])
+
+        observed = np.array(observed)
+
+        if observed.min() < 5:  # Chi-square requires min 5 expected
+            return False
+
+        try:
+            chi2, p_value, dof, expected = stats.chi2_contingency(observed)
+            return p_value < (1 - self.confidence_level)
+        except Exception:
+            return False
+
+    def determine_winner(self):
+        """Determine the winning variant based on goal type"""
+        if not self.is_statistically_significant():
+            return None
+
+        variants = self.variants.all()
+        best_variant = None
+        best_value = -float('inf')
+
+        for variant in variants:
+            if self.goal_type == 'clicks':
+                value = variant.get_ctr()
+            elif self.goal_type == 'conversions':
+                value = variant.get_conversion_rate()
+            elif self.goal_type == 'revenue':
+                value = variant.get_revenue_per_click()
+            else:  # bounce - lower is better
+                value = -variant.get_bounce_rate()
+
+            if value > best_value:
+                best_value = value
+                best_variant = variant
+
+        return best_variant
+
+
+class ABTestVariant(models.Model):
+    """Individual variant in an A/B test"""
+
+    ab_test = models.ForeignKey(ABTest, on_delete=models.CASCADE, related_name='variants')
+    name = models.CharField(max_length=100, help_text="e.g., 'Control', 'Variant A'")
+    destination_url = models.URLField(max_length=500)
+    weight = models.PositiveIntegerField(default=50, help_text="Traffic percentage (0-100)")
+    is_control = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['ab_test', '-is_control', 'created_at']
+
+    def __str__(self):
+        control = " (Control)" if self.is_control else ""
+        return f"{self.ab_test.name} - {self.name}{control}"
+
+    def get_visitors(self):
+        return self.clicks.values('visitor_id').distinct().count()
+
+    def get_total_clicks(self):
+        return self.clicks.count()
+
+    def get_conversions(self):
+        return self.clicks.filter(conversion_value__isnull=False).count()
+
+    def get_ctr(self):
+        """Click-through rate"""
+        visitors = self.get_visitors()
+        if visitors == 0:
+            return 0
+        return round((self.get_total_clicks() / visitors) * 100, 2)
+
+    def get_conversion_rate(self):
+        visitors = self.get_visitors()
+        if visitors == 0:
+            return 0
+        return round((self.get_conversions() / visitors) * 100, 2)
+
+    def get_revenue_per_click(self):
+        clicks = self.get_total_clicks()
+        if clicks == 0:
+            return 0
+        revenue = self.clicks.aggregate(total=models.Sum('conversion_value'))['total'] or 0
+        return round(float(revenue) / clicks, 2)
+
+    def get_bounce_rate(self):
+        """Percentage of single-page visits"""
+        visitors = self.get_visitors()
+        if visitors == 0:
+            return 0
+        # Consider bounced if only one click from visitor
+        single_clicks = self.clicks.values('visitor_id').annotate(
+            count=models.Count('id')
+        ).filter(count=1).count()
+        return round((single_clicks / visitors) * 100, 2)
+
+
+class Cohort(models.Model):
+    """Cohort definition for analysis"""
+
+    COHORT_TYPES = [
+        ('first_click', 'First Click Date'),
+        ('campaign', 'Campaign'),
+        ('source', 'Traffic Source'),
+        ('country', 'Country'),
+        ('device', 'Device Type'),
+    ]
+
+    name = models.CharField(max_length=200)
+    cohort_type = models.CharField(max_length=50, choices=COHORT_TYPES)
+    description = models.TextField(blank=True)
+
+    # Filter criteria (JSON)
+    criteria = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
+
+    def get_members(self, start_date=None, end_date=None):
+        """Get click data matching this cohort's criteria"""
+        queryset = ClickData.objects.all()
+
+        if start_date:
+            queryset = queryset.filter(timestamp__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(timestamp__lte=end_date)
+
+        # Apply cohort-specific filters
+        if self.cohort_type == 'campaign' and self.criteria.get('utm_campaign'):
+            queryset = queryset.filter(utm_campaign=self.criteria['utm_campaign'])
+        elif self.cohort_type == 'source' and self.criteria.get('utm_source'):
+            queryset = queryset.filter(utm_source=self.criteria['utm_source'])
+        elif self.cohort_type == 'country' and self.criteria.get('country_code'):
+            queryset = queryset.filter(country_code=self.criteria['country_code'])
+        elif self.cohort_type == 'device' and self.criteria.get('device_type'):
+            queryset = queryset.filter(device_type=self.criteria['device_type'])
+
+        return queryset
+
+
+class ClickFraudRule(models.Model):
+    """Rules for detecting click fraud"""
+
+    RULE_TYPES = [
+        ('ip_frequency', 'IP Frequency (clicks per minute)'),
+        ('ip_daily', 'IP Daily Limit'),
+        ('user_agent_pattern', 'User Agent Pattern'),
+        ('referrer_pattern', 'Referrer Pattern'),
+        ('country_blacklist', 'Country Blacklist'),
+        ('ip_range', 'IP Range Blacklist'),
+        ('bot_detection', 'Known Bot Detection'),
+    ]
+
+    ACTION_TYPES = [
+        ('flag', 'Flag for Review'),
+        ('block', 'Block Click'),
+        ('redirect', 'Redirect to Different URL'),
+        ('challenge', 'Show CAPTCHA Challenge'),
+    ]
+
+    name = models.CharField(max_length=200)
+    rule_type = models.CharField(max_length=50, choices=RULE_TYPES)
+    action = models.CharField(max_length=20, choices=ACTION_TYPES, default='flag')
+
+    # Rule parameters (JSON)
+    parameters = models.JSONField(default=dict)
+
+    # Optional redirect URL for 'redirect' action
+    redirect_url = models.URLField(max_length=500, blank=True)
+
+    is_active = models.BooleanField(default=True)
+    priority = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-priority', 'created_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.rule_type})"
+
+    def check_click(self, click_data: dict) -> tuple:
+        """Check if click matches this fraud rule. Returns (is_fraud, reason)"""
+        if self.rule_type == 'ip_frequency':
+            return self._check_ip_frequency(click_data)
+        elif self.rule_type == 'ip_daily':
+            return self._check_ip_daily(click_data)
+        elif self.rule_type == 'user_agent_pattern':
+            return self._check_user_agent_pattern(click_data)
+        elif self.rule_type == 'referrer_pattern':
+            return self._check_referrer_pattern(click_data)
+        elif self.rule_type == 'country_blacklist':
+            return self._check_country_blacklist(click_data)
+        elif self.rule_type == 'bot_detection':
+            return self._check_bot_detection(click_data)
+        return False, None
+
+    def _check_ip_frequency(self, click_data: dict) -> tuple:
+        """Check clicks per minute from same IP"""
+        import datetime
+        max_per_minute = self.parameters.get('max_per_minute', 10)
+        ip = click_data.get('ip_address')
+
+        if not ip:
+            return False, None
+
+        one_minute_ago = timezone.now() - datetime.timedelta(minutes=1)
+        recent_clicks = ClickData.objects.filter(
+            ip_address=ip,
+            timestamp__gte=one_minute_ago
+        ).count()
+
+        if recent_clicks >= max_per_minute:
+            return True, f"IP {ip} exceeded {max_per_minute} clicks/minute"
+        return False, None
+
+    def _check_ip_daily(self, click_data: dict) -> tuple:
+        """Check daily clicks from same IP"""
+        max_daily = self.parameters.get('max_daily', 100)
+        ip = click_data.get('ip_address')
+
+        if not ip:
+            return False, None
+
+        today = timezone.now().date()
+        daily_clicks = ClickData.objects.filter(
+            ip_address=ip,
+            timestamp__date=today
+        ).count()
+
+        if daily_clicks >= max_daily:
+            return True, f"IP {ip} exceeded {max_daily} clicks/day"
+        return False, None
+
+    def _check_user_agent_pattern(self, click_data: dict) -> tuple:
+        """Check user agent against patterns"""
+        import re
+        patterns = self.parameters.get('patterns', [])
+        user_agent = click_data.get('user_agent', '')
+
+        for pattern in patterns:
+            if re.search(pattern, user_agent, re.IGNORECASE):
+                return True, f"User agent matched fraud pattern: {pattern}"
+        return False, None
+
+    def _check_referrer_pattern(self, click_data: dict) -> tuple:
+        """Check referrer against suspicious patterns"""
+        import re
+        patterns = self.parameters.get('patterns', [])
+        referrer = click_data.get('referrer', '')
+
+        for pattern in patterns:
+            if re.search(pattern, referrer, re.IGNORECASE):
+                return True, f"Referrer matched fraud pattern: {pattern}"
+        return False, None
+
+    def _check_country_blacklist(self, click_data: dict) -> tuple:
+        """Check if country is blacklisted"""
+        blacklist = self.parameters.get('countries', [])
+        country_code = click_data.get('country_code', '')
+
+        if country_code in blacklist:
+            return True, f"Country {country_code} is blacklisted"
+        return False, None
+
+    def _check_bot_detection(self, click_data: dict) -> tuple:
+        """Check for known bot signatures"""
+        user_agent = click_data.get('user_agent', '').lower()
+
+        bot_signatures = [
+            'bot', 'spider', 'crawler', 'scraper', 'curl', 'wget',
+            'python-requests', 'httpx', 'aiohttp', 'scrapy',
+            'headless', 'phantom', 'selenium', 'puppeteer'
+        ]
+
+        for sig in bot_signatures:
+            if sig in user_agent:
+                return True, f"Bot signature detected: {sig}"
+        return False, None
+
+
+class FraudAlert(models.Model):
+    """Fraud detection alerts"""
+
+    SEVERITY_LEVELS = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    ]
+
+    STATUS_CHOICES = [
+        ('new', 'New'),
+        ('investigating', 'Investigating'),
+        ('confirmed', 'Confirmed Fraud'),
+        ('dismissed', 'Dismissed'),
+    ]
+
+    rule = models.ForeignKey(ClickFraudRule, on_delete=models.SET_NULL, null=True, related_name='alerts')
+    click = models.ForeignKey(ClickData, on_delete=models.CASCADE, related_name='fraud_alerts')
+
+    severity = models.CharField(max_length=20, choices=SEVERITY_LEVELS, default='medium')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='new')
+    reason = models.TextField()
+
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Fraud Alert: {self.reason[:50]} ({self.severity})"
+
+
+class PredictiveModel(models.Model):
+    """Store predictive model configurations and results"""
+
+    MODEL_TYPES = [
+        ('traffic_forecast', 'Traffic Forecast'),
+        ('conversion_prediction', 'Conversion Prediction'),
+        ('churn_prediction', 'Churn Prediction'),
+        ('anomaly_detection', 'Anomaly Detection'),
+    ]
+
+    name = models.CharField(max_length=200)
+    model_type = models.CharField(max_length=50, choices=MODEL_TYPES)
+    description = models.TextField(blank=True)
+
+    # Model configuration
+    config = models.JSONField(default=dict)
+
+    # Serialized model (pickle/joblib)
+    model_data = models.BinaryField(null=True, blank=True)
+
+    # Performance metrics
+    accuracy = models.FloatField(null=True, blank=True)
+    last_trained = models.DateTimeField(null=True, blank=True)
+    training_samples = models.PositiveIntegerField(default=0)
+
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.model_type})"
+
+
+class Attribution(models.Model):
+    """Multi-touch attribution tracking"""
+
+    ATTRIBUTION_MODELS = [
+        ('first_touch', 'First Touch'),
+        ('last_touch', 'Last Touch'),
+        ('linear', 'Linear'),
+        ('time_decay', 'Time Decay'),
+        ('position_based', 'Position Based'),
+        ('data_driven', 'Data-Driven'),
+    ]
+
+    visitor_id = models.CharField(max_length=64, db_index=True)
+    conversion_id = models.CharField(max_length=64, unique=True)
+
+    # Conversion details
+    conversion_value = models.DecimalField(max_digits=10, decimal_places=2)
+    conversion_currency = models.CharField(max_length=3, default='USD')
+    converted_at = models.DateTimeField()
+
+    # Attribution results (JSON: {model: {touchpoint_id: credit}})
+    attributions = models.JSONField(default=dict)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-converted_at']
+
+    def __str__(self):
+        return f"Attribution {self.conversion_id[:8]} - ${self.conversion_value}"
+
+
+class TouchPoint(models.Model):
+    """Individual touch point in attribution path"""
+
+    attribution = models.ForeignKey(Attribution, on_delete=models.CASCADE, related_name='touchpoints')
+    click = models.ForeignKey(ClickData, on_delete=models.CASCADE, related_name='touchpoints')
+
+    position = models.PositiveIntegerField()  # Order in the path
+    channel = models.CharField(max_length=100)  # e.g., utm_source
+    campaign = models.CharField(max_length=100, blank=True)
+
+    timestamp = models.DateTimeField()
+
+    class Meta:
+        ordering = ['attribution', 'position']
+
+    def __str__(self):
+        return f"Touchpoint {self.position}: {self.channel}"
