@@ -11,11 +11,18 @@ from django_plotly_dash.routing import get_channel_routes
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'url_shortener.settings')
 
+# Initialize Django ASGI application early
+django_asgi_app = get_asgi_application()
+
+# Import after Django setup
+from shortener.routing import websocket_urlpatterns
+
+# Combine plotly dash routes with our custom routes
+all_routes = websocket_urlpatterns + get_channel_routes()
+
 application = ProtocolTypeRouter({
-    "http": get_asgi_application(),
+    "http": django_asgi_app,
     "websocket": AuthMiddlewareStack(
-        URLRouter(
-            get_channel_routes()
-        )
+        URLRouter(all_routes)
     ),
 })

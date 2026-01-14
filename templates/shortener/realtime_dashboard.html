@@ -1,0 +1,366 @@
+{% extends 'base.html' %}
+
+{% block title %}Real-Time Analytics{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-bolt text-warning me-2"></i>Real-Time Analytics</h2>
+        <span class="badge bg-success fs-6" id="connection-status">
+            <i class="fas fa-circle me-1"></i>Connecting...
+        </span>
+    </div>
+
+    <!-- Live Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white shadow">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-white-50">RIGHT NOW</h6>
+                            <h2 class="mb-0" id="recent-clicks">{{ stats.recent_clicks }}</h2>
+                            <small>clicks in last 5 min</small>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-bolt fa-2x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white shadow">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-white-50">LAST HOUR</h6>
+                            <h2 class="mb-0" id="hourly-clicks">{{ stats.hourly_clicks }}</h2>
+                            <small>total clicks</small>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-mouse-pointer fa-2x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white shadow">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-white-50">ACTIVE URLS</h6>
+                            <h2 class="mb-0" id="active-urls">{{ stats.active_urls }}</h2>
+                            <small>with recent clicks</small>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-link fa-2x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark shadow">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h6 class="text-dark-50">VISITORS</h6>
+                            <h2 class="mb-0" id="unique-visitors">{{ stats.unique_visitors }}</h2>
+                            <small>unique this hour</small>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-users fa-2x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Live Click Stream -->
+        <div class="col-lg-8">
+            <div class="card shadow mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-stream me-2"></i>Live Click Stream</h5>
+                    <span class="badge bg-primary" id="click-count">0 new clicks</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Short Code</th>
+                                    <th>Location</th>
+                                    <th>Device</th>
+                                    <th>Browser</th>
+                                </tr>
+                            </thead>
+                            <tbody id="click-stream">
+                                {% for click in recent_clicks %}
+                                <tr>
+                                    <td><small>{{ click.timestamp }}</small></td>
+                                    <td><code>{{ click.short_code }}</code></td>
+                                    <td>
+                                        {% if click.city %}{{ click.city }}, {% endif %}
+                                        {{ click.country|default:"Unknown" }}
+                                    </td>
+                                    <td>{{ click.device_type }}</td>
+                                    <td><small>{{ click.browser|truncatechars:20 }}</small></td>
+                                </tr>
+                                {% empty %}
+                                <tr id="no-clicks-row">
+                                    <td colspan="5" class="text-center text-muted py-4">
+                                        Waiting for clicks...
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Clicks Per Minute Chart -->
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Clicks Per Minute</h5>
+                </div>
+                <div class="card-body">
+                    <div id="clicks-chart" style="height: 250px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top URLs & Map -->
+        <div class="col-lg-4">
+            <div class="card shadow mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-fire me-2"></i>Hot URLs (Last Hour)</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush" id="top-urls">
+                        {% for url in stats.top_urls %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <code>{{ url.url__short_code }}</code>
+                                <br>
+                                <small class="text-muted text-truncate" style="max-width: 200px;">
+                                    {{ url.url__original_url|truncatechars:30 }}
+                                </small>
+                            </div>
+                            <span class="badge bg-primary rounded-pill">{{ url.clicks }}</span>
+                        </li>
+                        {% empty %}
+                        <li class="list-group-item text-center text-muted">
+                            No clicks in the last hour
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Live Map -->
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-globe me-2"></i>Live Clicks Map</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div id="live-map" style="height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// WebSocket connection
+let socket = null;
+let clickCount = 0;
+let clicksData = [];
+
+function connectWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    socket = new WebSocket(`${protocol}//${window.location.host}/ws/analytics/`);
+
+    socket.onopen = function(e) {
+        document.getElementById('connection-status').innerHTML =
+            '<i class="fas fa-circle me-1"></i>Live';
+        document.getElementById('connection-status').className = 'badge bg-success fs-6';
+    };
+
+    socket.onclose = function(e) {
+        document.getElementById('connection-status').innerHTML =
+            '<i class="fas fa-circle me-1"></i>Disconnected';
+        document.getElementById('connection-status').className = 'badge bg-danger fs-6';
+
+        // Reconnect after 5 seconds
+        setTimeout(connectWebSocket, 5000);
+    };
+
+    socket.onerror = function(e) {
+        console.error('WebSocket error:', e);
+    };
+
+    socket.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+
+        if (data.type === 'click') {
+            handleNewClick(data);
+        } else if (data.type === 'stats' || data.type === 'initial') {
+            updateStats(data.stats || data.data);
+        }
+    };
+}
+
+function handleNewClick(click) {
+    clickCount++;
+    document.getElementById('click-count').textContent = `${clickCount} new clicks`;
+
+    // Remove "no clicks" row if exists
+    const noClicksRow = document.getElementById('no-clicks-row');
+    if (noClicksRow) noClicksRow.remove();
+
+    // Add new row at top
+    const tbody = document.getElementById('click-stream');
+    const row = document.createElement('tr');
+    row.className = 'table-success';
+    row.innerHTML = `
+        <td><small>${new Date(click.timestamp).toLocaleTimeString()}</small></td>
+        <td><code>${click.short_code}</code></td>
+        <td>${click.city ? click.city + ', ' : ''}${click.country || 'Unknown'}</td>
+        <td>${click.device_type}</td>
+        <td><small>${(click.browser || '').substring(0, 20)}</small></td>
+    `;
+    tbody.insertBefore(row, tbody.firstChild);
+
+    // Flash effect
+    setTimeout(() => row.classList.remove('table-success'), 2000);
+
+    // Limit to 50 rows
+    while (tbody.children.length > 50) {
+        tbody.removeChild(tbody.lastChild);
+    }
+
+    // Update map
+    if (click.latitude && click.longitude) {
+        addPointToMap(click.latitude, click.longitude, click.city);
+    }
+
+    // Update stats
+    const recentClicks = parseInt(document.getElementById('recent-clicks').textContent) + 1;
+    document.getElementById('recent-clicks').textContent = recentClicks;
+}
+
+function updateStats(stats) {
+    if (stats.recent_clicks !== undefined) {
+        document.getElementById('recent-clicks').textContent = stats.recent_clicks;
+    }
+    if (stats.hourly_clicks !== undefined) {
+        document.getElementById('hourly-clicks').textContent = stats.hourly_clicks;
+    }
+    if (stats.active_urls !== undefined) {
+        document.getElementById('active-urls').textContent = stats.active_urls;
+    }
+    if (stats.unique_visitors !== undefined) {
+        document.getElementById('unique-visitors').textContent = stats.unique_visitors;
+    }
+}
+
+// Initialize map
+let map = null;
+function initMap() {
+    const mapData = [{
+        type: 'scattergeo',
+        mode: 'markers',
+        lat: [],
+        lon: [],
+        text: [],
+        marker: {
+            size: 10,
+            color: '#0d6efd',
+            opacity: 0.8,
+        }
+    }];
+
+    const layout = {
+        geo: {
+            projection: { type: 'natural earth' },
+            showland: true,
+            landcolor: '#e8e8e8',
+            showocean: true,
+            oceancolor: '#d4e4ed',
+            showcountries: true,
+            countrycolor: '#c8c8c8',
+        },
+        margin: { t: 0, r: 0, b: 0, l: 0 },
+        paper_bgcolor: 'transparent',
+    };
+
+    Plotly.newPlot('live-map', mapData, layout, {responsive: true, displayModeBar: false});
+}
+
+function addPointToMap(lat, lon, text) {
+    Plotly.extendTraces('live-map', {
+        lat: [[lat]],
+        lon: [[lon]],
+        text: [[text || 'Click']]
+    }, [0]);
+}
+
+// Initialize clicks chart
+function initClicksChart() {
+    fetch('/shortener/api/realtime/per-minute/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const chartData = [{
+                    x: data.data.map(d => new Date(d.minute)),
+                    y: data.data.map(d => d.count),
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    fill: 'tozeroy',
+                    line: { color: '#0d6efd' }
+                }];
+
+                const layout = {
+                    margin: { t: 10, r: 20, b: 40, l: 40 },
+                    xaxis: { title: '' },
+                    yaxis: { title: 'Clicks' },
+                    paper_bgcolor: 'transparent',
+                    plot_bgcolor: 'transparent'
+                };
+
+                Plotly.newPlot('clicks-chart', chartData, layout, {responsive: true});
+            }
+        });
+}
+
+// Poll for stats updates (fallback if WebSocket fails)
+function pollStats() {
+    fetch('/shortener/api/realtime/stats/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateStats(data.data);
+            }
+        });
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    initMap();
+    initClicksChart();
+    connectWebSocket();
+
+    // Refresh chart every minute
+    setInterval(initClicksChart, 60000);
+
+    // Fallback polling every 30 seconds
+    setInterval(pollStats, 30000);
+});
+</script>
+{% endblock %}
