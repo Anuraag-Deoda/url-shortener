@@ -1,0 +1,236 @@
+{% extends 'base.html' %}
+
+{% block title %}Attribution Analysis{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-project-diagram me-2"></i>Multi-Touch Attribution</h2>
+        <div>
+            <div class="btn-group me-2">
+                <a href="?days=7&model={{ model }}" class="btn btn-{% if days == 7 %}primary{% else %}outline-primary{% endif %}">7d</a>
+                <a href="?days=30&model={{ model }}" class="btn btn-{% if days == 30 %}primary{% else %}outline-primary{% endif %}">30d</a>
+                <a href="?days=90&model={{ model }}" class="btn btn-{% if days == 90 %}primary{% else %}outline-primary{% endif %}">90d</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attribution Model Selection -->
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-sliders-h me-2"></i>Attribution Model</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                {% for model_id, model_name in models %}
+                <div class="col-md-2">
+                    <a href="?days={{ days }}&model={{ model_id }}"
+                       class="card text-center p-3 text-decoration-none {% if model == model_id %}border-primary bg-light{% endif %}">
+                        <i class="fas fa-{% if model_id == 'first_touch' %}sign-in-alt{% elif model_id == 'last_touch' %}sign-out-alt{% elif model_id == 'linear' %}equals{% elif model_id == 'time_decay' %}hourglass-half{% else %}balance-scale{% endif %} fa-2x mb-2 {% if model == model_id %}text-primary{% else %}text-muted{% endif %}"></i>
+                        <small class="{% if model == model_id %}text-primary fw-bold{% else %}text-muted{% endif %}">{{ model_name }}</small>
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="mt-3">
+                <small class="text-muted">
+                    {% if model == 'first_touch' %}
+                    <strong>First Touch:</strong> 100% credit to the first touchpoint in the customer journey.
+                    {% elif model == 'last_touch' %}
+                    <strong>Last Touch:</strong> 100% credit to the last touchpoint before conversion.
+                    {% elif model == 'linear' %}
+                    <strong>Linear:</strong> Equal credit distributed across all touchpoints.
+                    {% elif model == 'time_decay' %}
+                    <strong>Time Decay:</strong> More credit to touchpoints closer to conversion (50% half-life of 7 days).
+                    {% elif model == 'position_based' %}
+                    <strong>Position Based:</strong> 40% to first, 40% to last, 20% distributed among middle touchpoints.
+                    {% endif %}
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Channel Attribution -->
+    <div class="row">
+        <div class="col-lg-8 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Revenue by Channel ({{ model|title }})</h5>
+                </div>
+                <div class="card-body">
+                    <div id="channel-chart" style="height: 350px;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-list-ol me-2"></i>Channel Rankings</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Channel</th>
+                                    <th class="text-end">Revenue</th>
+                                    <th class="text-end">Conv.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in channel_attribution %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td><strong>{{ item.channel }}</strong></td>
+                                    <td class="text-end">${{ item.attributed_revenue|floatformat:2 }}</td>
+                                    <td class="text-end">{{ item.conversions }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">No attribution data</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Comparison -->
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-balance-scale me-2"></i>Model Comparison</h5>
+                </div>
+                <div class="card-body">
+                    <div id="comparison-chart" style="height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Conversions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-trophy me-2"></i>Recent Conversions</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Conversion ID</th>
+                                    <th>Visitor</th>
+                                    <th class="text-end">Value</th>
+                                    <th>Touchpoints</th>
+                                    <th>Converted At</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for conv in recent_conversions %}
+                                <tr>
+                                    <td><code>{{ conv.conversion_id|truncatechars:12 }}</code></td>
+                                    <td><small>{{ conv.visitor_id|truncatechars:12 }}</small></td>
+                                    <td class="text-end"><strong>${{ conv.conversion_value }}</strong></td>
+                                    <td>{{ conv.touchpoints.count }} touchpoint{{ conv.touchpoints.count|pluralize }}</td>
+                                    <td>{{ conv.converted_at|date:"M d, Y H:i" }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">No conversions recorded yet</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Channel Attribution Chart
+    const channelData = {{ channel_attribution|safe }};
+
+    if (channelData && channelData.length > 0) {
+        const data = [{
+            x: channelData.map(d => d.channel),
+            y: channelData.map(d => d.attributed_revenue),
+            type: 'bar',
+            marker: { color: '#0d6efd' }
+        }];
+
+        const layout = {
+            margin: { t: 20, r: 20, b: 60, l: 60 },
+            yaxis: { title: 'Attributed Revenue ($)' },
+            paper_bgcolor: 'transparent',
+            plot_bgcolor: 'transparent'
+        };
+
+        Plotly.newPlot('channel-chart', data, layout, {responsive: true});
+    } else {
+        document.getElementById('channel-chart').innerHTML =
+            '<p class="text-center text-muted py-5">No attribution data available</p>';
+    }
+
+    // Model Comparison Chart - fetch from API
+    fetch(`{% url 'shortener:api_attribution_by_model' %}?days={{ days }}`)
+        .then(response => response.json())
+        .then(result => {
+            if (result.success && Object.keys(result.data).length > 0) {
+                const modelData = result.data;
+                const traces = [];
+                const colors = {
+                    'first_touch': '#0d6efd',
+                    'last_touch': '#198754',
+                    'linear': '#ffc107',
+                    'time_decay': '#dc3545',
+                    'position_based': '#6f42c1'
+                };
+
+                // Get all unique channels
+                const allChannels = new Set();
+                Object.values(modelData).forEach(channels => {
+                    channels.forEach(c => allChannels.add(c.channel));
+                });
+
+                Object.entries(modelData).forEach(([modelName, channels]) => {
+                    const channelMap = {};
+                    channels.forEach(c => channelMap[c.channel] = c.attributed_revenue);
+
+                    traces.push({
+                        name: modelName.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+                        x: Array.from(allChannels),
+                        y: Array.from(allChannels).map(c => channelMap[c] || 0),
+                        type: 'bar',
+                        marker: { color: colors[modelName] }
+                    });
+                });
+
+                const layout = {
+                    barmode: 'group',
+                    margin: { t: 20, r: 20, b: 60, l: 60 },
+                    yaxis: { title: 'Attributed Revenue ($)' },
+                    legend: { orientation: 'h', y: -0.2 },
+                    paper_bgcolor: 'transparent',
+                    plot_bgcolor: 'transparent'
+                };
+
+                Plotly.newPlot('comparison-chart', traces, layout, {responsive: true});
+            } else {
+                document.getElementById('comparison-chart').innerHTML =
+                    '<p class="text-center text-muted py-4">No comparison data available</p>';
+            }
+        });
+});
+</script>
+{% endblock %}
