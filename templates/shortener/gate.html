@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}Access Required - {{ url.short_code }}{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white text-center">
+                    <h4 class="mb-0"><i class="fas fa-lock me-2"></i>Access Required</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted text-center mb-4">
+                        This link requires verification before you can proceed.
+                    </p>
+
+                    {% if error %}
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i>{{ error }}
+                    </div>
+                    {% endif %}
+
+                    <form method="post">
+                        {% csrf_token %}
+
+                        {% if requires_password %}
+                        <div class="mb-4">
+                            <label class="form-label"><i class="fas fa-key me-2"></i>Password</label>
+                            <input type="password" name="password" class="form-control form-control-lg"
+                                   placeholder="Enter password" required autofocus>
+                            {% if password_hint %}
+                            <small class="form-text text-muted">
+                                <i class="fas fa-lightbulb me-1"></i>Hint: {{ password_hint }}
+                            </small>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        {% if requires_captcha %}
+                        <div class="mb-4">
+                            <label class="form-label"><i class="fas fa-robot me-2"></i>Verification</label>
+
+                            {% if captcha_type == 'simple' and captcha_data %}
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <strong>{{ captcha_data.num1 }} + {{ captcha_data.num2 }} = ?</strong>
+                                </span>
+                                <input type="number" name="captcha_answer" class="form-control form-control-lg"
+                                       placeholder="Answer" required {% if not requires_password %}autofocus{% endif %}>
+                            </div>
+                            <small class="form-text text-muted">
+                                Solve the math problem to continue.
+                            </small>
+                            {% elif captcha_type == 'recaptcha' %}
+                            <div class="g-recaptcha" data-sitekey="{{ recaptcha_site_key }}"></div>
+                            <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+                            {% elif captcha_type == 'hcaptcha' %}
+                            <div class="h-captcha" data-sitekey="{{ hcaptcha_site_key }}"></div>
+                            <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-unlock me-2"></i>Continue
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-footer text-center text-muted">
+                    <small>Link: {{ url.short_code }}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
