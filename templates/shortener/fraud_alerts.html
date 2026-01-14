@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+
+{% block title %}Fraud Alerts{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-exclamation-triangle me-2"></i>Fraud Alerts</h2>
+        <a href="{% url 'shortener:fraud_dashboard' %}" class="btn btn-outline-primary">
+            <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+        </a>
+    </div>
+
+    <!-- Filters -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="">All Statuses</option>
+                        <option value="new" {% if request.GET.status == 'new' %}selected{% endif %}>New</option>
+                        <option value="investigating" {% if request.GET.status == 'investigating' %}selected{% endif %}>Investigating</option>
+                        <option value="confirmed" {% if request.GET.status == 'confirmed' %}selected{% endif %}>Confirmed</option>
+                        <option value="dismissed" {% if request.GET.status == 'dismissed' %}selected{% endif %}>Dismissed</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Severity</label>
+                    <select name="severity" class="form-select">
+                        <option value="">All Severities</option>
+                        <option value="critical" {% if request.GET.severity == 'critical' %}selected{% endif %}>Critical</option>
+                        <option value="high" {% if request.GET.severity == 'high' %}selected{% endif %}>High</option>
+                        <option value="medium" {% if request.GET.severity == 'medium' %}selected{% endif %}>Medium</option>
+                        <option value="low" {% if request.GET.severity == 'low' %}selected{% endif %}>Low</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-filter me-2"></i>Filter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Alerts Table -->
+    <div class="card shadow">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>Time</th>
+                        <th>IP Address</th>
+                        <th>Severity</th>
+                        <th>Status</th>
+                        <th>Rule</th>
+                        <th>Reason</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for alert in alerts %}
+                    <tr>
+                        <td><code>#{{ alert.id }}</code></td>
+                        <td>
+                            <small>{{ alert.created_at|date:"M d, Y H:i" }}</small>
+                            <br>
+                            <small class="text-muted">{{ alert.created_at|timesince }} ago</small>
+                        </td>
+                        <td><code>{{ alert.ip_address }}</code></td>
+                        <td>
+                            <span class="badge bg-{% if alert.severity == 'critical' %}danger{% elif alert.severity == 'high' %}warning{% elif alert.severity == 'medium' %}info{% else %}secondary{% endif %}">
+                                {{ alert.severity|title }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if alert.status == 'new' %}danger{% elif alert.status == 'investigating' %}warning{% elif alert.status == 'confirmed' %}dark{% else %}success{% endif %}">
+                                {{ alert.status|title }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if alert.rule %}
+                            {{ alert.rule.name }}
+                            {% else %}
+                            <span class="text-muted">Built-in</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small>{{ alert.reason|truncatechars:50 }}</small>
+                        </td>
+                        <td>
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                        data-bs-toggle="dropdown">
+                                    Status
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li>
+                                        <form method="post" action="{% url 'shortener:fraud_alert_status' alert.pk %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="status" value="investigating">
+                                            <button type="submit" class="dropdown-item">
+                                                <i class="fas fa-search me-2"></i>Investigate
+                                            </button>
+                                        </form>
+                                    </li>
+                                    <li>
+                                        <form method="post" action="{% url 'shortener:fraud_alert_status' alert.pk %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="status" value="confirmed">
+                                            <button type="submit" class="dropdown-item text-danger">
+                                                <i class="fas fa-check me-2"></i>Confirm Fraud
+                                            </button>
+                                        </form>
+                                    </li>
+                                    <li>
+                                        <form method="post" action="{% url 'shortener:fraud_alert_status' alert.pk %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="status" value="dismissed">
+                                            <button type="submit" class="dropdown-item text-success">
+                                                <i class="fas fa-times me-2"></i>Dismiss
+                                            </button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-4 text-muted">
+                            No fraud alerts found
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}&status={{ request.GET.status }}&severity={{ request.GET.severity }}">Previous</a>
+            </li>
+            {% endif %}
+            <li class="page-item active">
+                <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            </li>
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}&status={{ request.GET.status }}&severity={{ request.GET.severity }}">Next</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

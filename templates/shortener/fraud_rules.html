@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+
+{% block title %}Fraud Detection Rules{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-cog me-2"></i>Fraud Detection Rules</h2>
+        <div>
+            <a href="{% url 'shortener:fraud_dashboard' %}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-arrow-left me-2"></i>Dashboard
+            </a>
+            <a href="{% url 'shortener:fraud_rule_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Add Rule
+            </a>
+        </div>
+    </div>
+
+    {% if rules %}
+    <div class="card shadow">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Priority</th>
+                        <th>Rule Name</th>
+                        <th>Type</th>
+                        <th>Action</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rule in rules %}
+                    <tr>
+                        <td>
+                            <span class="badge bg-secondary">{{ rule.priority }}</span>
+                        </td>
+                        <td>
+                            <strong>{{ rule.name }}</strong>
+                        </td>
+                        <td>{{ rule.get_rule_type_display }}</td>
+                        <td>
+                            <span class="badge bg-{% if rule.action == 'block' %}danger{% elif rule.action == 'challenge' %}warning{% elif rule.action == 'redirect' %}info{% else %}secondary{% endif %}">
+                                {{ rule.get_action_display }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if rule.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'shortener:fraud_rule_edit' rule.pk %}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="card shadow">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-shield-alt fa-4x text-muted mb-4"></i>
+            <h4>No Fraud Rules Configured</h4>
+            <p class="text-muted">Add rules to automatically detect and prevent click fraud.</p>
+            <a href="{% url 'shortener:fraud_rule_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Add Rule
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Rule Types Reference -->
+    <div class="card shadow mt-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-book me-2"></i>Rule Types Reference</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6><i class="fas fa-clock text-primary me-2"></i>IP Frequency</h6>
+                    <p class="small text-muted">Limit clicks per minute from the same IP address.</p>
+
+                    <h6><i class="fas fa-calendar text-primary me-2"></i>IP Daily Limit</h6>
+                    <p class="small text-muted">Maximum clicks per day from the same IP.</p>
+
+                    <h6><i class="fas fa-robot text-primary me-2"></i>Bot Detection</h6>
+                    <p class="small text-muted">Detect known bot user agents.</p>
+                </div>
+                <div class="col-md-6">
+                    <h6><i class="fas fa-desktop text-primary me-2"></i>User Agent Pattern</h6>
+                    <p class="small text-muted">Block suspicious user agent strings.</p>
+
+                    <h6><i class="fas fa-link text-primary me-2"></i>Referrer Pattern</h6>
+                    <p class="small text-muted">Block clicks from suspicious referrers.</p>
+
+                    <h6><i class="fas fa-globe text-primary me-2"></i>Country Blacklist</h6>
+                    <p class="small text-muted">Block clicks from specific countries.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

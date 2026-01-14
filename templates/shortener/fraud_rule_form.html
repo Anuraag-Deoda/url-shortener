@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if object %}Edit{% else %}Create{% endif %} Fraud Rule{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-shield-alt me-2"></i>
+                        {% if object %}Edit Fraud Rule{% else %}Create Fraud Rule{% endif %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label class="form-label">Rule Name *</label>
+                            <input type="text" name="name" class="form-control form-control-lg"
+                                   value="{{ object.name|default:'' }}"
+                                   placeholder="e.g., High Frequency IP Blocker" required>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Rule Type *</label>
+                                <select name="rule_type" class="form-select" id="ruleType" required>
+                                    <option value="">Select type...</option>
+                                    <option value="ip_frequency" {% if object.rule_type == 'ip_frequency' %}selected{% endif %}>IP Frequency (clicks per minute)</option>
+                                    <option value="ip_daily" {% if object.rule_type == 'ip_daily' %}selected{% endif %}>IP Daily Limit</option>
+                                    <option value="user_agent_pattern" {% if object.rule_type == 'user_agent_pattern' %}selected{% endif %}>User Agent Pattern</option>
+                                    <option value="referrer_pattern" {% if object.rule_type == 'referrer_pattern' %}selected{% endif %}>Referrer Pattern</option>
+                                    <option value="country_blacklist" {% if object.rule_type == 'country_blacklist' %}selected{% endif %}>Country Blacklist</option>
+                                    <option value="bot_detection" {% if object.rule_type == 'bot_detection' %}selected{% endif %}>Known Bot Detection</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Action *</label>
+                                <select name="action" class="form-select" id="actionType" required>
+                                    <option value="flag" {% if object.action == 'flag' %}selected{% endif %}>Flag for Review</option>
+                                    <option value="block" {% if object.action == 'block' %}selected{% endif %}>Block Click</option>
+                                    <option value="redirect" {% if object.action == 'redirect' %}selected{% endif %}>Redirect</option>
+                                    <option value="challenge" {% if object.action == 'challenge' %}selected{% endif %}>Show CAPTCHA</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mb-3" id="redirectUrlGroup" style="display: none;">
+                            <label class="form-label">Redirect URL</label>
+                            <input type="url" name="redirect_url" class="form-control"
+                                   value="{{ object.redirect_url|default:'' }}"
+                                   placeholder="https://example.com/blocked">
+                            <small class="text-muted">URL to redirect blocked clicks to</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Parameters (JSON) *</label>
+                            <textarea name="parameters" class="form-control font-monospace" rows="5"
+                                      id="parameters" required>{{ object.parameters|default:'{}' }}</textarea>
+                            <small class="text-muted" id="parameterHelp">
+                                Configure rule-specific parameters
+                            </small>
+                        </div>
+
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label class="form-label">Priority</label>
+                                <input type="number" name="priority" class="form-control"
+                                       value="{{ object.priority|default:0 }}" min="0">
+                                <small class="text-muted">Higher priority rules are checked first</small>
+                            </div>
+                            <div class="col-md-6 d-flex align-items-end">
+                                <div class="form-check form-switch">
+                                    <input type="checkbox" name="is_active" class="form-check-input"
+                                           id="isActive" {% if object.is_active or not object %}checked{% endif %}>
+                                    <label class="form-check-label" for="isActive">Rule Active</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'shortener:fraud_rules' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Cancel
+                            </a>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-save me-2"></i>{% if object %}Save Changes{% else %}Create Rule{% endif %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Parameter Examples -->
+            <div class="card shadow mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-code me-2"></i>Parameter Examples</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>IP Frequency</h6>
+                            <pre class="bg-light p-2 small">{"max_per_minute": 10}</pre>
+
+                            <h6>IP Daily Limit</h6>
+                            <pre class="bg-light p-2 small">{"max_daily": 100}</pre>
+
+                            <h6>User Agent Pattern</h6>
+                            <pre class="bg-light p-2 small">{"patterns": ["bot", "crawler", "spider"]}</pre>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Referrer Pattern</h6>
+                            <pre class="bg-light p-2 small">{"patterns": ["click.*exchange", "traffic.*bot"]}</pre>
+
+                            <h6>Country Blacklist</h6>
+                            <pre class="bg-light p-2 small">{"countries": ["XX", "YY", "ZZ"]}</pre>
+
+                            <h6>Bot Detection</h6>
+                            <pre class="bg-light p-2 small">{}</pre>
+                            <small class="text-muted">Uses built-in bot signatures</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('actionType').addEventListener('change', function() {
+    const redirectGroup = document.getElementById('redirectUrlGroup');
+    redirectGroup.style.display = this.value === 'redirect' ? 'block' : 'none';
+});
+
+document.getElementById('ruleType').addEventListener('change', function() {
+    const help = document.getElementById('parameterHelp');
+    const params = document.getElementById('parameters');
+
+    const examples = {
+        'ip_frequency': '{"max_per_minute": 10}',
+        'ip_daily': '{"max_daily": 100}',
+        'user_agent_pattern': '{"patterns": ["bot", "crawler"]}',
+        'referrer_pattern': '{"patterns": ["suspicious.com"]}',
+        'country_blacklist': '{"countries": ["XX"]}',
+        'bot_detection': '{}'
+    };
+
+    if (examples[this.value] && params.value === '{}') {
+        params.value = examples[this.value];
+    }
+});
+
+// Initialize on load
+if (document.getElementById('actionType').value === 'redirect') {
+    document.getElementById('redirectUrlGroup').style.display = 'block';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,320 @@
+{% extends 'base.html' %}
+
+{% block title %}Fraud Detection{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-shield-alt me-2"></i>Fraud Detection Dashboard</h2>
+        <div>
+            <div class="btn-group me-2">
+                <a href="?days=1" class="btn btn-{% if days == 1 %}primary{% else %}outline-primary{% endif %}">24h</a>
+                <a href="?days=7" class="btn btn-{% if days == 7 %}primary{% else %}outline-primary{% endif %}">7d</a>
+                <a href="?days=30" class="btn btn-{% if days == 30 %}primary{% else %}outline-primary{% endif %}">30d</a>
+            </div>
+            <a href="{% url 'shortener:fraud_rule_create' %}" class="btn btn-success">
+                <i class="fas fa-plus me-2"></i>Add Rule
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-danger text-white shadow">
+                <div class="card-body text-center">
+                    <h3 class="mb-0">{{ summary.total_alerts }}</h3>
+                    <small>Total Alerts</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark shadow">
+                <div class="card-body text-center">
+                    <h3 class="mb-0">{{ summary.status_breakdown.new|default:0 }}</h3>
+                    <small>New Alerts</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white shadow">
+                <div class="card-body text-center">
+                    <h3 class="mb-0">{{ summary.blocked_clicks }}</h3>
+                    <small>Blocked Clicks</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white shadow">
+                <div class="card-body text-center">
+                    <h3 class="mb-0">{{ rules|length }}</h3>
+                    <small>Active Rules</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Severity Breakdown -->
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Alerts by Severity</h5>
+                </div>
+                <div class="card-body">
+                    <div id="severity-chart" style="height: 250px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rule Type Breakdown -->
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-list me-2"></i>Alerts by Rule Type</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        {% for rule_type, count in summary.rule_breakdown.items %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <span>{{ rule_type|default:"Built-in" }}</span>
+                            <span class="badge bg-danger rounded-pill">{{ count }}</span>
+                        </li>
+                        {% empty %}
+                        <li class="list-group-item text-muted text-center">No alerts</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Offending IPs -->
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-ban me-2"></i>Top Suspicious IPs</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        {% for ip in summary.top_offending_ips|slice:":5" %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <code>{{ ip.ip_address|default:"Unknown" }}</code>
+                            <div>
+                                <span class="badge bg-danger rounded-pill me-1">{{ ip.count }}</span>
+                                <button class="btn btn-sm btn-outline-info" onclick="analyzeIP('{{ ip.ip_address }}')">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                        </li>
+                        {% empty %}
+                        <li class="list-group-item text-muted text-center">No suspicious IPs</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Active Rules -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-cog me-2"></i>Active Rules</h5>
+                    <a href="{% url 'shortener:fraud_rules' %}" class="btn btn-sm btn-outline-primary">Manage</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Rule</th>
+                                    <th>Type</th>
+                                    <th>Action</th>
+                                    <th>Priority</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for rule in rules %}
+                                <tr>
+                                    <td><strong>{{ rule.name }}</strong></td>
+                                    <td><small>{{ rule.get_rule_type_display }}</small></td>
+                                    <td>
+                                        <span class="badge bg-{% if rule.action == 'block' %}danger{% elif rule.action == 'challenge' %}warning{% else %}info{% endif %}">
+                                            {{ rule.action }}
+                                        </span>
+                                    </td>
+                                    <td>{{ rule.priority }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">No rules configured</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Alerts -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-bell me-2"></i>Recent Alerts</h5>
+                    <a href="{% url 'shortener:fraud_alerts' %}" class="btn btn-sm btn-outline-danger">View All</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Time</th>
+                                    <th>IP</th>
+                                    <th>Severity</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for alert in recent_alerts %}
+                                <tr>
+                                    <td><small>{{ alert.created_at|timesince }} ago</small></td>
+                                    <td><code>{{ alert.ip_address|truncatechars:15 }}</code></td>
+                                    <td>
+                                        <span class="badge bg-{% if alert.severity == 'critical' %}danger{% elif alert.severity == 'high' %}warning{% elif alert.severity == 'medium' %}info{% else %}secondary{% endif %}">
+                                            {{ alert.severity }}
+                                        </span>
+                                    </td>
+                                    <td><small>{{ alert.reason|truncatechars:30 }}</small></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">No recent alerts</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recommendations -->
+    {% if recommendations %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow border-info">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Recommended Rules</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Based on recent click patterns, we recommend adding these fraud detection rules:</p>
+                    <div class="row">
+                        {% for rec in recommendations %}
+                        <div class="col-md-4 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h6>{{ rec.rule_type|title }}</h6>
+                                    <p class="text-muted small">{{ rec.reason }}</p>
+                                    <pre class="bg-light p-2 small">{{ rec.suggested_config }}</pre>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- IP Analysis Modal -->
+<div class="modal fade" id="ipModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-search me-2"></i>IP Analysis</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="ipModalBody">
+                <div class="text-center">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p>Analyzing IP...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+function analyzeIP(ip) {
+    const modal = new bootstrap.Modal(document.getElementById('ipModal'));
+    modal.show();
+
+    fetch(`{% url 'shortener:api_fraud_ip_analysis' %}?ip=${ip}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const d = data.data;
+                document.getElementById('ipModalBody').innerHTML = `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Overview</h6>
+                            <dl class="row">
+                                <dt class="col-sm-6">IP Address</dt>
+                                <dd class="col-sm-6"><code>${d.ip_address}</code></dd>
+                                <dt class="col-sm-6">Total Clicks</dt>
+                                <dd class="col-sm-6">${d.total_clicks}</dd>
+                                <dt class="col-sm-6">Alerts</dt>
+                                <dd class="col-sm-6">${d.total_alerts}</dd>
+                                <dt class="col-sm-6">Risk Score</dt>
+                                <dd class="col-sm-6">
+                                    <span class="badge bg-${d.risk_level === 'high' ? 'danger' : d.risk_level === 'medium' ? 'warning' : 'success'}">${d.risk_score}/100</span>
+                                </dd>
+                            </dl>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Top URLs Clicked</h6>
+                            <ul class="list-group list-group-flush">
+                                ${d.top_urls.map(u => `<li class="list-group-item d-flex justify-content-between"><code>${u.url__short_code}</code><span>${u.count}</span></li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+}
+
+// Severity chart
+document.addEventListener('DOMContentLoaded', function() {
+    const severityData = {{ summary.severity_breakdown|safe }};
+
+    if (Object.keys(severityData).length > 0) {
+        const data = [{
+            values: Object.values(severityData),
+            labels: Object.keys(severityData).map(s => s.charAt(0).toUpperCase() + s.slice(1)),
+            type: 'pie',
+            marker: {
+                colors: ['#dc3545', '#ffc107', '#0dcaf0', '#6c757d']
+            }
+        }];
+
+        const layout = {
+            margin: { t: 10, r: 10, b: 10, l: 10 },
+            showlegend: true,
+            legend: { orientation: 'h' },
+            paper_bgcolor: 'transparent'
+        };
+
+        Plotly.newPlot('severity-chart', data, layout, {responsive: true});
+    } else {
+        document.getElementById('severity-chart').innerHTML =
+            '<p class="text-center text-muted py-4">No severity data</p>';
+    }
+});
+</script>
+{% endblock %}
