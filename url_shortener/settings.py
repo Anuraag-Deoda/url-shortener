@@ -133,3 +133,52 @@ CORS_ALLOW_ALL_ORIGINS = True  # For development only, restrict in production
 
 # OpenAI API Key - Make sure to set this in your .env file
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+
+# Celery Configuration
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+CELERY_BEAT_SCHEDULE = {
+    'update-traffic-forecasts': {
+        'task': 'shortener.tasks.update_traffic_forecasts',
+        'schedule': 3600.0,  # Every hour
+    },
+    'detect-anomalies': {
+        'task': 'shortener.tasks.detect_anomalies',
+        'schedule': 300.0,  # Every 5 minutes
+    },
+    'cleanup-old-sessions': {
+        'task': 'shortener.tasks.cleanup_old_sessions',
+        'schedule': 86400.0,  # Daily
+    },
+    'retrain-bot-detector': {
+        'task': 'shortener.tasks.retrain_bot_detector',
+        'schedule': 86400.0,  # Daily
+    },
+}
+
+# Redis Cache Configuration
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': os.environ.get('REDIS_URL', 'redis://localhost:6379/1'),
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        },
+        'KEY_PREFIX': 'urlshort',
+        'TIMEOUT': 300,  # 5 minutes default
+    }
+}
+
+# Cache timeouts for different data types
+CACHE_TIMEOUTS = {
+    'click_stats': 60,  # 1 minute
+    'campaign_stats': 300,  # 5 minutes
+    'forecast_data': 3600,  # 1 hour
+    'model_predictions': 1800,  # 30 minutes
+}
