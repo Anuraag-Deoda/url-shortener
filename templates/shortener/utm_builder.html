@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+
+{% block title %}UTM Builder{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-10">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-tools me-2"></i>UTM Campaign URL Builder</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        Generate URLs with UTM parameters to track your marketing campaigns.
+                    </p>
+
+                    <div class="mb-4">
+                        <label class="form-label">Base URL *</label>
+                        <input type="url" id="base-url" class="form-control form-control-lg"
+                               placeholder="https://example.com/page" required>
+                    </div>
+
+                    <h6 class="text-muted mb-3"><i class="fas fa-tag me-2"></i>Required Parameters</h6>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Campaign Source *</label>
+                            <input type="text" id="utm-source" class="form-control"
+                                   placeholder="e.g., google, facebook, newsletter">
+                            <small class="text-muted">The referrer (e.g., google, newsletter)</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Campaign Medium *</label>
+                            <input type="text" id="utm-medium" class="form-control"
+                                   placeholder="e.g., cpc, banner, email">
+                            <small class="text-muted">Marketing medium (e.g., cpc, banner, email)</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Campaign Name *</label>
+                            <input type="text" id="utm-campaign" class="form-control"
+                                   placeholder="e.g., spring_sale">
+                            <small class="text-muted">The individual campaign name</small>
+                        </div>
+                    </div>
+
+                    <h6 class="text-muted mb-3"><i class="fas fa-plus-circle me-2"></i>Optional Parameters</h6>
+
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label">Campaign Term</label>
+                            <input type="text" id="utm-term" class="form-control"
+                                   placeholder="e.g., running+shoes">
+                            <small class="text-muted">Paid keywords (for paid search)</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Campaign Content</label>
+                            <input type="text" id="utm-content" class="form-control"
+                                   placeholder="e.g., logolink, textlink">
+                            <small class="text-muted">Differentiate ads/links that point to the same URL</small>
+                        </div>
+                    </div>
+
+                    <button type="button" id="generate-btn" class="btn btn-primary btn-lg w-100">
+                        <i class="fas fa-magic me-2"></i>Generate URL
+                    </button>
+
+                    <div id="result-container" class="mt-4 d-none">
+                        <h6><i class="fas fa-link me-2"></i>Generated URL</h6>
+                        <div class="input-group">
+                            <input type="text" id="generated-url" class="form-control" readonly>
+                            <button class="btn btn-outline-secondary" type="button" id="copy-btn">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <small class="text-muted" id="copy-feedback"></small>
+
+                        <div class="mt-3">
+                            <a href="#" id="shorten-btn" class="btn btn-success">
+                                <i class="fas fa-compress-arrows-alt me-2"></i>Create Short URL
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Common UTM Parameters Reference -->
+            <div class="card shadow mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-book me-2"></i>UTM Parameter Reference</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h6>Common Sources</h6>
+                            <ul class="small">
+                                <li>google</li>
+                                <li>facebook</li>
+                                <li>twitter</li>
+                                <li>linkedin</li>
+                                <li>instagram</li>
+                                <li>newsletter</li>
+                                <li>bing</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6>Common Mediums</h6>
+                            <ul class="small">
+                                <li>cpc (cost per click)</li>
+                                <li>cpm (cost per impression)</li>
+                                <li>social</li>
+                                <li>email</li>
+                                <li>banner</li>
+                                <li>affiliate</li>
+                                <li>organic</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <h6>Best Practices</h6>
+                            <ul class="small">
+                                <li>Use lowercase letters</li>
+                                <li>Use underscores instead of spaces</li>
+                                <li>Be consistent with naming</li>
+                                <li>Keep campaign names descriptive</li>
+                                <li>Document your UTM conventions</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('generate-btn').addEventListener('click', function() {
+    const baseUrl = document.getElementById('base-url').value;
+    const utmSource = document.getElementById('utm-source').value;
+    const utmMedium = document.getElementById('utm-medium').value;
+    const utmCampaign = document.getElementById('utm-campaign').value;
+    const utmTerm = document.getElementById('utm-term').value;
+    const utmContent = document.getElementById('utm-content').value;
+
+    if (!baseUrl || !utmSource || !utmMedium || !utmCampaign) {
+        alert('Please fill in all required fields (URL, Source, Medium, Campaign)');
+        return;
+    }
+
+    const params = new URLSearchParams();
+    params.append('utm_source', utmSource);
+    params.append('utm_medium', utmMedium);
+    params.append('utm_campaign', utmCampaign);
+    if (utmTerm) params.append('utm_term', utmTerm);
+    if (utmContent) params.append('utm_content', utmContent);
+
+    const separator = baseUrl.includes('?') ? '&' : '?';
+    const finalUrl = baseUrl + separator + params.toString();
+
+    document.getElementById('generated-url').value = finalUrl;
+    document.getElementById('result-container').classList.remove('d-none');
+
+    // Update shorten button
+    document.getElementById('shorten-btn').href = '{% url "shortener:home" %}?url=' + encodeURIComponent(finalUrl);
+});
+
+document.getElementById('copy-btn').addEventListener('click', function() {
+    const urlInput = document.getElementById('generated-url');
+    urlInput.select();
+    document.execCommand('copy');
+
+    document.getElementById('copy-feedback').textContent = 'Copied!';
+    setTimeout(() => {
+        document.getElementById('copy-feedback').textContent = '';
+    }, 2000);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block title %}Campaigns{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-bullhorn me-2"></i>Marketing Campaigns</h2>
+        <a href="{% url 'shortener:campaign_create' %}" class="btn btn-primary">
+            <i class="fas fa-plus me-2"></i>New Campaign
+        </a>
+    </div>
+
+    {% if campaigns %}
+    <div class="row">
+        {% for campaign in campaigns %}
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ campaign.name }}</h5>
+                    <span class="badge bg-{% if campaign.is_active %}success{% else %}secondary{% endif %}">
+                        {% if campaign.is_active %}Active{% else %}Inactive{% endif %}
+                    </span>
+                </div>
+                <div class="card-body">
+                    {% if campaign.description %}
+                    <p class="text-muted small">{{ campaign.description|truncatechars:100 }}</p>
+                    {% endif %}
+
+                    <div class="row text-center mb-3">
+                        <div class="col-3">
+                            <h4 class="mb-0 text-primary">{{ campaign.stats.total_clicks }}</h4>
+                            <small class="text-muted">Clicks</small>
+                        </div>
+                        <div class="col-3">
+                            <h4 class="mb-0 text-success">{{ campaign.stats.unique_visitors }}</h4>
+                            <small class="text-muted">Visitors</small>
+                        </div>
+                        <div class="col-3">
+                            <h4 class="mb-0 text-info">{{ campaign.stats.conversions }}</h4>
+                            <small class="text-muted">Conversions</small>
+                        </div>
+                        <div class="col-3">
+                            <h4 class="mb-0 text-warning">${{ campaign.stats.revenue|floatformat:0 }}</h4>
+                            <small class="text-muted">Revenue</small>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center border-top pt-3">
+                        <div>
+                            <small class="text-muted">
+                                <strong>UTM:</strong> {{ campaign.utm_campaign }}
+                            </small>
+                            {% if campaign.budget %}
+                            <br>
+                            <small class="text-muted">
+                                <strong>Budget:</strong> ${{ campaign.budget }} |
+                                <strong>Spent:</strong> ${{ campaign.spent }}
+                            </small>
+                            {% endif %}
+                        </div>
+                        <div>
+                            {% if campaign.stats.roi is not None %}
+                            <span class="badge bg-{% if campaign.stats.roi > 0 %}success{% elif campaign.stats.roi < 0 %}danger{% else %}secondary{% endif %} fs-6">
+                                ROI: {{ campaign.stats.roi }}%
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a href="{% url 'shortener:campaign_detail' campaign.pk %}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-chart-line me-1"></i>Analytics
+                    </a>
+                    <a href="{% url 'shortener:campaign_urls' campaign.pk %}" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-link me-1"></i>URLs
+                    </a>
+                    <a href="{% url 'shortener:campaign_edit' campaign.pk %}" class="btn btn-outline-info btn-sm">
+                        <i class="fas fa-edit me-1"></i>Edit
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card shadow">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-bullhorn fa-4x text-muted mb-4"></i>
+            <h4>No Campaigns Yet</h4>
+            <p class="text-muted">Create your first marketing campaign to track UTM parameters and measure ROI.</p>
+            <a href="{% url 'shortener:campaign_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Create Campaign
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

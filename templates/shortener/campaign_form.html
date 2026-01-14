@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if object %}Edit{% else %}Create{% endif %} Campaign{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-bullhorn me-2"></i>
+                        {% if object %}Edit Campaign{% else %}Create New Campaign{% endif %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="row mb-3">
+                            <div class="col-md-8">
+                                <label class="form-label">Campaign Name *</label>
+                                <input type="text" name="name" class="form-control form-control-lg"
+                                       value="{{ object.name|default:'' }}"
+                                       placeholder="e.g., Summer Sale 2024" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Currency</label>
+                                <select name="currency" class="form-select form-select-lg">
+                                    <option value="USD" {% if object.currency == 'USD' %}selected{% endif %}>USD</option>
+                                    <option value="EUR" {% if object.currency == 'EUR' %}selected{% endif %}>EUR</option>
+                                    <option value="GBP" {% if object.currency == 'GBP' %}selected{% endif %}>GBP</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea name="description" class="form-control" rows="2"
+                                      placeholder="Campaign description...">{{ object.description|default:'' }}</textarea>
+                        </div>
+
+                        <h6 class="text-muted mb-3"><i class="fas fa-tag me-2"></i>UTM Parameters</h6>
+
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">UTM Source</label>
+                                <input type="text" name="utm_source" class="form-control"
+                                       value="{{ object.utm_source|default:'' }}"
+                                       placeholder="e.g., facebook, google">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">UTM Medium</label>
+                                <input type="text" name="utm_medium" class="form-control"
+                                       value="{{ object.utm_medium|default:'' }}"
+                                       placeholder="e.g., cpc, email">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">UTM Campaign *</label>
+                                <input type="text" name="utm_campaign" class="form-control"
+                                       value="{{ object.utm_campaign|default:'' }}"
+                                       placeholder="e.g., summer_sale" required>
+                            </div>
+                        </div>
+
+                        <h6 class="text-muted mb-3"><i class="fas fa-dollar-sign me-2"></i>Budget</h6>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Budget</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" name="budget" class="form-control"
+                                           value="{{ object.budget|default:'' }}"
+                                           step="0.01" placeholder="0.00">
+                                </div>
+                            </div>
+                            {% if object %}
+                            <div class="col-md-6">
+                                <label class="form-label">Spent</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" name="spent" class="form-control"
+                                           value="{{ object.spent|default:'0' }}"
+                                           step="0.01">
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <h6 class="text-muted mb-3"><i class="fas fa-calendar me-2"></i>Schedule</h6>
+
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label class="form-label">Start Date</label>
+                                <input type="date" name="start_date" class="form-control"
+                                       value="{{ object.start_date|date:'Y-m-d'|default:'' }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">End Date</label>
+                                <input type="date" name="end_date" class="form-control"
+                                       value="{{ object.end_date|date:'Y-m-d'|default:'' }}">
+                            </div>
+                        </div>
+
+                        {% if object %}
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                <input type="checkbox" name="is_active" class="form-check-input"
+                                       id="isActive" {% if object.is_active %}checked{% endif %}>
+                                <label class="form-check-label" for="isActive">Campaign Active</label>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'shortener:campaign_list' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>{% if object %}Save Changes{% else %}Create Campaign{% endif %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
