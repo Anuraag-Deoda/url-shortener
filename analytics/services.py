@@ -200,5 +200,73 @@ class AnalyticsService:
             
             retention_rate = (len(returning_visitors) / len(initial_visitors) * 100) if initial_visitors else 0
             retention_rates[f'{period}d'] = round(retention_rate, 2)
-        
-        return retention_rates 
+
+        return retention_rates
+
+    @staticmethod
+    def get_geographic_data(url_id: Optional[int] = None) -> Dict[str, Any]:
+        """Get geographic distribution of clicks for heatmap visualization"""
+        cache_key = f'geo_data_{url_id}' if url_id else 'geo_data_all'
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
+
+        clicks = ClickData.objects.exclude(latitude__isnull=True).exclude(longitude__isnull=True)
+        if url_id:
+            clicks = clicks.filter(url_id=url_id)
+
+        # Point data for scattergeo
+        point_data = list(clicks.values('latitude', 'longitude', 'city', 'country')
+                          .annotate(count=Count('id')))
+
+        # Country aggregation for choropleth
+        country_data = list(clicks.values('country_code', 'country')
+                            .annotate(count=Count('id'))
+                            .order_by('-count'))
+
+        # City top 10
+        city_data = list(clicks.values('city', 'country', 'latitude', 'longitude')
+                         .annotate(count=Count('id'))
+                         .order_by('-count')[:10])
+
+        result = {
+            'points': point_data,
+            'by_country': country_data,
+            'top_cities': city_data,
+            'total_located': clicks.count(),
+        }
+
+        cache.set(cache_key, result, AnalyticsService.CACHE_TTL)
+        return result
+
+    @staticmethod
+    def get_rotation_stats(url_id: int) -> Dict[str, Any]:
+        """Get rotation performance statistics"""
+        from shortener.models import RotationGroup, RotationURL
+
+        url = URL.objects.get(id=url_id)
+
+        if not hasattr(url, 'rotation_group'):
+            return {'enabled': False}
+
+        rotation_group = url.rotation_group
+        rotation_urls = rotation_group.rotation_urls.all()
+
+        # Per-URL stats
+        url_stats = []
+        for rot_url in rotation_urls:
+            url_stats.append({
+                'id': rot_url.id,
+                'label': rot_url.label or rot_url.destination_url[:40],
+                'destination': rot_url.destination_url,
+                'clicks': rot_url.clicks,
+                'weight': rot_url.weight,
+                'is_active': rot_url.is_active,
+            })
+
+        return {
+            'enabled': True,
+            'strategy': rotation_group.strategy,
+            'url_stats': url_stats,
+            'total_clicks': sum(u['clicks'] for u in url_stats),
+        }

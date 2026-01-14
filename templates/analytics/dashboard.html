@@ -270,6 +270,59 @@
         </div>
     </div>
 
+    <!-- Geographic Heatmap Section -->
+    <div class="chart-container">
+        <div class="chart-header">
+            <h3 class="chart-title"><i class="fas fa-globe me-2"></i>Geographic Distribution</h3>
+            <div class="chart-actions">
+                <button class="btn btn-sm btn-outline-secondary active" onclick="toggleMapType('scatter')" id="btn-scatter">Points</button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="toggleMapType('choropleth')" id="btn-choropleth">Countries</button>
+            </div>
+        </div>
+        <div id="geoHeatmapChart" style="height: 450px;"></div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="table-container mb-4">
+                <div class="table-header">
+                    <h3 class="table-title"><i class="fas fa-map-marker-alt me-2"></i>Top Locations</h3>
+                </div>
+                <table class="custom-table" id="locationTable">
+                    <thead>
+                        <tr>
+                            <th>City</th>
+                            <th>Country</th>
+                            <th>Clicks</th>
+                        </tr>
+                    </thead>
+                    <tbody id="locationTableBody">
+                        <tr><td colspan="3" class="text-center text-muted">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="table-container mb-4">
+                <div class="table-header">
+                    <h3 class="table-title"><i class="fas fa-flag me-2"></i>Top Countries</h3>
+                </div>
+                <table class="custom-table" id="countryTable">
+                    <thead>
+                        <tr>
+                            <th>Country</th>
+                            <th>Clicks</th>
+                            <th>Percentage</th>
+                        </tr>
+                    </thead>
+                    <tbody id="countryTableBody">
+                        <tr><td colspan="3" class="text-center text-muted">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <div class="table-container">
         <div class="table-header">
             <h3 class="table-title">Top Performing URLs</h3>
@@ -517,5 +570,167 @@ function updateChart(period) {
         })
         .catch(error => console.error('Error updating chart:', error));
 }
+
+// Geographic Heatmap Functions
+let geoData = null;
+let currentMapType = 'scatter';
+
+function loadGeoData() {
+    fetch('/analytics/api/geo/')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                geoData = data.data;
+                initGeoHeatmap(geoData);
+                updateLocationTables(geoData);
+            } else {
+                document.getElementById('geoHeatmapChart').innerHTML = '<p class="text-center text-muted py-5">No geographic data available yet</p>';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading geo data:', error);
+            document.getElementById('geoHeatmapChart').innerHTML = '<p class="text-center text-muted py-5">Failed to load geographic data</p>';
+        });
+}
+
+function initGeoHeatmap(geoData) {
+    if (!geoData || !geoData.points || !geoData.points.length) {
+        document.getElementById('geoHeatmapChart').innerHTML = '<p class="text-center text-muted py-5">No geographic data available. Click data with location will appear here.</p>';
+        return;
+    }
+
+    showScatterMap(geoData);
+}
+
+function showScatterMap(geoData) {
+    const trace = {
+        type: 'scattergeo',
+        mode: 'markers',
+        lat: geoData.points.map(p => p.latitude),
+        lon: geoData.points.map(p => p.longitude),
+        text: geoData.points.map(p => `${p.city || 'Unknown'}, ${p.country || 'Unknown'}: ${p.count} clicks`),
+        marker: {
+            size: geoData.points.map(p => Math.min(Math.max(p.count * 3, 6), 40)),
+            color: geoData.points.map(p => p.count),
+            colorscale: 'Viridis',
+            colorbar: { title: 'Clicks', thickness: 15 },
+            opacity: 0.8,
+            line: { color: 'white', width: 1 }
+        },
+        hoverinfo: 'text'
+    };
+
+    const layout = {
+        geo: {
+            projection: { type: 'natural earth' },
+            showland: true,
+            landcolor: '#e8e8e8',
+            showocean: true,
+            oceancolor: '#d4e4ed',
+            showcountries: true,
+            countrycolor: '#c8c8c8',
+            showlakes: true,
+            lakecolor: '#d4e4ed',
+            coastlinecolor: '#a8a8a8'
+        },
+        margin: { t: 10, r: 10, b: 10, l: 10 },
+        paper_bgcolor: 'transparent'
+    };
+
+    Plotly.newPlot('geoHeatmapChart', [trace], layout, {responsive: true});
+}
+
+function showChoroplethMap(geoData) {
+    if (!geoData.by_country || !geoData.by_country.length) {
+        document.getElementById('geoHeatmapChart').innerHTML = '<p class="text-center text-muted py-5">No country data available</p>';
+        return;
+    }
+
+    const trace = {
+        type: 'choropleth',
+        locations: geoData.by_country.map(c => c.country_code),
+        z: geoData.by_country.map(c => c.count),
+        text: geoData.by_country.map(c => c.country),
+        colorscale: 'Blues',
+        colorbar: { title: 'Clicks', thickness: 15 },
+        hovertemplate: '%{text}<br>Clicks: %{z}<extra></extra>'
+    };
+
+    const layout = {
+        geo: {
+            projection: { type: 'natural earth' },
+            showland: true,
+            landcolor: '#f0f0f0',
+            showcountries: true,
+            countrycolor: '#d0d0d0'
+        },
+        margin: { t: 10, r: 10, b: 10, l: 10 },
+        paper_bgcolor: 'transparent'
+    };
+
+    Plotly.newPlot('geoHeatmapChart', [trace], layout, {responsive: true});
+}
+
+function toggleMapType(type) {
+    currentMapType = type;
+
+    // Update button states
+    document.getElementById('btn-scatter').classList.toggle('active', type === 'scatter');
+    document.getElementById('btn-choropleth').classList.toggle('active', type === 'choropleth');
+
+    if (geoData) {
+        if (type === 'scatter') {
+            showScatterMap(geoData);
+        } else {
+            showChoroplethMap(geoData);
+        }
+    }
+}
+
+function updateLocationTables(geoData) {
+    // Update top cities table
+    const cityBody = document.getElementById('locationTableBody');
+    if (geoData.top_cities && geoData.top_cities.length) {
+        cityBody.innerHTML = geoData.top_cities.map(city => `
+            <tr>
+                <td>${city.city || 'Unknown'}</td>
+                <td>${city.country || 'Unknown'}</td>
+                <td><span class="badge bg-primary">${city.count}</span></td>
+            </tr>
+        `).join('');
+    } else {
+        cityBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No location data yet</td></tr>';
+    }
+
+    // Update top countries table
+    const countryBody = document.getElementById('countryTableBody');
+    if (geoData.by_country && geoData.by_country.length) {
+        const totalClicks = geoData.by_country.reduce((sum, c) => sum + c.count, 0);
+        countryBody.innerHTML = geoData.by_country.slice(0, 10).map(country => {
+            const percentage = ((country.count / totalClicks) * 100).toFixed(1);
+            return `
+                <tr>
+                    <td>${country.country || 'Unknown'}</td>
+                    <td><span class="badge bg-primary">${country.count}</span></td>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <div class="progress flex-grow-1 me-2" style="height: 6px;">
+                                <div class="progress-bar" style="width: ${percentage}%"></div>
+                            </div>
+                            <small>${percentage}%</small>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } else {
+        countryBody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No country data yet</td></tr>';
+    }
+}
+
+// Load geographic data on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadGeoData();
+});
 </script>
 {% endblock %}

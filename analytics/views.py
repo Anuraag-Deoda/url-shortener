@@ -19,9 +19,14 @@ from dash import dcc
 from dash import html
 from dash.dependencies import Input, Output
 
-from langchain_community.llms import OpenAI
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
+# LangChain imports - optional for AI insights
+try:
+    from langchain_community.llms import OpenAI
+    from langchain.chains import LLMChain
+    from langchain.prompts import PromptTemplate
+    LANGCHAIN_AVAILABLE = True
+except ImportError:
+    LANGCHAIN_AVAILABLE = False
 import json
 import datetime
 from .services import AnalyticsService
@@ -257,10 +262,16 @@ def url_data_api(request, short_code):
 
 def ai_insights_api(request, short_code):
     """API endpoint for AI-generated insights about URL analytics"""
+    if not LANGCHAIN_AVAILABLE:
+        return JsonResponse({
+            'success': False,
+            'message': 'LangChain not available'
+        })
+
     url = get_object_or_404(URL, short_code=short_code)
     clicks = ClickData.objects.filter(url=url)
-    
-    if not clicks.exists() or not settings.OPENAI_API_KEY:
+
+    if not clicks.exists() or not getattr(settings, 'OPENAI_API_KEY', None):
         return JsonResponse({
             'success': False,
             'message': 'No click data available or OpenAI API key not configured'
@@ -447,3 +458,17 @@ def api_dashboard_stats(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+
+def geographic_data_api(request, short_code=None):
+    """API endpoint for geographic click data (heatmap)"""
+    url_id = None
+    if short_code:
+        url = get_object_or_404(URL, short_code=short_code)
+        url_id = url.id
+
+    geo_data = AnalyticsService.get_geographic_data(url_id)
+    return JsonResponse({
+        'success': True,
+        'data': geo_data
+    })
