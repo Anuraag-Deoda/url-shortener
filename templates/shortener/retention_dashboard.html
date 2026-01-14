@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+
+{% block title %}Retention Analysis{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-redo me-2"></i>Retention Cohort Analysis</h2>
+        <div>
+            <div class="btn-group me-2">
+                <a href="?days={{ days }}&period=day" class="btn btn-{% if period == 'day' %}primary{% else %}outline-primary{% endif %}">Daily</a>
+                <a href="?days={{ days }}&period=week" class="btn btn-{% if period == 'week' %}primary{% else %}outline-primary{% endif %}">Weekly</a>
+                <a href="?days={{ days }}&period=month" class="btn btn-{% if period == 'month' %}primary{% else %}outline-primary{% endif %}">Monthly</a>
+            </div>
+            <div class="btn-group">
+                <a href="?days=30&period={{ period }}" class="btn btn-{% if days == 30 %}secondary{% else %}outline-secondary{% endif %}">30d</a>
+                <a href="?days=60&period={{ period }}" class="btn btn-{% if days == 60 %}secondary{% else %}outline-secondary{% endif %}">60d</a>
+                <a href="?days=90&period={{ period }}" class="btn btn-{% if days == 90 %}secondary{% else %}outline-secondary{% endif %}">90d</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-table me-2"></i>Retention Cohort Matrix</h5>
+        </div>
+        <div class="card-body">
+            {% if retention_data.cohorts %}
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm retention-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Cohort</th>
+                            <th>Size</th>
+                            {% for i in retention_data.cohorts.0.retention %}
+                            <th class="text-center">{{ period|title }} {{ i.period }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cohort in retention_data.cohorts %}
+                        <tr>
+                            <td><strong>{{ cohort.cohort_date }}</strong></td>
+                            <td>{{ cohort.size }}</td>
+                            {% for ret in cohort.retention %}
+                            <td class="text-center retention-cell"
+                                style="background-color: rgba(13, 110, 253, {{ ret.percentage|divisibleby:100 }});
+                                       {% if ret.percentage >= 50 %}color: white;{% endif %}">
+                                {{ ret.percentage }}%
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-4">
+                <h6>Legend</h6>
+                <div class="d-flex align-items-center">
+                    <div class="retention-legend-item" style="background-color: rgba(13, 110, 253, 0.1);">0%</div>
+                    <div class="retention-legend-item" style="background-color: rgba(13, 110, 253, 0.3);">25%</div>
+                    <div class="retention-legend-item" style="background-color: rgba(13, 110, 253, 0.5);">50%</div>
+                    <div class="retention-legend-item" style="background-color: rgba(13, 110, 253, 0.75); color: white;">75%</div>
+                    <div class="retention-legend-item" style="background-color: rgba(13, 110, 253, 1); color: white;">100%</div>
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-chart-line fa-4x text-muted mb-3"></i>
+                <h5 class="text-muted">No Retention Data</h5>
+                <p class="text-muted">Start tracking visitor IDs to see retention cohorts.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Retention Chart -->
+    <div class="card shadow">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Retention Over Time</h5>
+        </div>
+        <div class="card-body">
+            <div id="retention-chart" style="height: 350px;"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+.retention-table {
+    font-size: 0.85rem;
+}
+.retention-cell {
+    min-width: 60px;
+    transition: all 0.2s;
+}
+.retention-cell:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+.retention-legend-item {
+    padding: 5px 15px;
+    margin-right: 5px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+</style>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const retentionData = {{ retention_data.cohorts|safe|default:"[]" }};
+
+    if (retentionData.length > 0) {
+        // Create average retention curve
+        const maxPeriods = Math.max(...retentionData.map(c => c.retention.length));
+        const avgRetention = [];
+
+        for (let i = 0; i < maxPeriods; i++) {
+            let sum = 0;
+            let count = 0;
+            retentionData.forEach(cohort => {
+                if (cohort.retention[i]) {
+                    sum += cohort.retention[i].percentage;
+                    count++;
+                }
+            });
+            avgRetention.push(count > 0 ? sum / count : 0);
+        }
+
+        const traces = [
+            {
+                x: avgRetention.map((_, i) => i),
+                y: avgRetention,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Average Retention',
+                line: { color: '#0d6efd', width: 3 },
+                marker: { size: 10 }
+            }
+        ];
+
+        // Add individual cohort lines (faded)
+        retentionData.slice(0, 5).forEach((cohort, idx) => {
+            traces.push({
+                x: cohort.retention.map(r => r.period),
+                y: cohort.retention.map(r => r.percentage),
+                type: 'scatter',
+                mode: 'lines',
+                name: cohort.cohort_date,
+                line: { color: '#0d6efd', width: 1 },
+                opacity: 0.3
+            });
+        });
+
+        const layout = {
+            margin: { t: 20, r: 20, b: 60, l: 60 },
+            xaxis: { title: '{{ period|title }}s Since First Visit' },
+            yaxis: { title: 'Retention Rate (%)', range: [0, 100] },
+            legend: { orientation: 'h', y: -0.2 },
+            paper_bgcolor: 'transparent',
+            plot_bgcolor: 'transparent'
+        };
+
+        Plotly.newPlot('retention-chart', traces, layout, {responsive: true});
+    } else {
+        document.getElementById('retention-chart').innerHTML =
+            '<p class="text-center text-muted py-5">No retention data available</p>';
+    }
+});
+</script>
+{% endblock %}

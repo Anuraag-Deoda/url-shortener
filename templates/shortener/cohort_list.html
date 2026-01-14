@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+
+{% block title %}Cohorts{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-users me-2"></i>Cohort Analysis</h2>
+        <div>
+            <a href="{% url 'shortener:retention_dashboard' %}" class="btn btn-outline-primary me-2">
+                <i class="fas fa-redo me-2"></i>Retention Dashboard
+            </a>
+            <a href="{% url 'shortener:cohort_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>New Cohort
+            </a>
+        </div>
+    </div>
+
+    {% if cohorts %}
+    <div class="row">
+        {% for cohort in cohorts %}
+        <div class="col-md-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ cohort.name }}</h5>
+                    <span class="badge bg-primary">{{ cohort.get_cohort_type_display }}</span>
+                </div>
+                <div class="card-body">
+                    {% if cohort.description %}
+                    <p class="text-muted small">{{ cohort.description }}</p>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <strong>Criteria:</strong>
+                        <pre class="bg-light p-2 small mt-1 mb-0">{{ cohort.criteria }}</pre>
+                    </div>
+
+                    <small class="text-muted">Created {{ cohort.created_at|date:"M d, Y" }}</small>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <a href="{% url 'shortener:cohort_detail' cohort.pk %}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-chart-line me-1"></i>Analyze
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card shadow">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-users fa-4x text-muted mb-4"></i>
+            <h4>No Cohorts Defined</h4>
+            <p class="text-muted">Create cohorts to analyze specific user segments.</p>
+            <a href="{% url 'shortener:cohort_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Create Cohort
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Predefined Cohort Types -->
+    <div class="card shadow mt-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Cohort Types</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <div class="card bg-light h-100">
+                        <div class="card-body">
+                            <h6><i class="fas fa-calendar me-2 text-primary"></i>First Click Date</h6>
+                            <p class="small text-muted mb-0">Group visitors by when they first clicked a link.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card bg-light h-100">
+                        <div class="card-body">
+                            <h6><i class="fas fa-bullhorn me-2 text-success"></i>Campaign</h6>
+                            <p class="small text-muted mb-0">Group by specific UTM campaign.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card bg-light h-100">
+                        <div class="card-body">
+                            <h6><i class="fas fa-globe me-2 text-info"></i>Traffic Source</h6>
+                            <p class="small text-muted mb-0">Group by UTM source (google, facebook, etc.).</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card bg-light h-100">
+                        <div class="card-body">
+                            <h6><i class="fas fa-map-marker-alt me-2 text-warning"></i>Country</h6>
+                            <p class="small text-muted mb-0">Group visitors by their country.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card bg-light h-100">
+                        <div class="card-body">
+                            <h6><i class="fas fa-mobile-alt me-2 text-danger"></i>Device Type</h6>
+                            <p class="small text-muted mb-0">Group by device (mobile, desktop, tablet).</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
