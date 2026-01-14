@@ -98,6 +98,30 @@
                                         <i class="fas fa-chevron-right ms-auto text-muted"></i>
                                         {% endif %}
                                     </a>
+                                    <a href="{% url 'shortener:time_based' url.pk %}" class="list-group-item list-group-item-action d-flex align-items-center">
+                                        <i class="fas fa-clock me-3 text-success"></i>
+                                        <div>
+                                            <strong>Time-Based Redirects</strong>
+                                            <p class="mb-0 small text-muted">Schedule different URLs by time</p>
+                                        </div>
+                                        {% if url.enable_time_based %}
+                                        <span class="badge bg-success ms-auto">Active</span>
+                                        {% else %}
+                                        <i class="fas fa-chevron-right ms-auto text-muted"></i>
+                                        {% endif %}
+                                    </a>
+                                    <a href="{% url 'shortener:link_settings' url.pk %}" class="list-group-item list-group-item-action d-flex align-items-center">
+                                        <i class="fas fa-shield-alt me-3 text-danger"></i>
+                                        <div>
+                                            <strong>Link Protection</strong>
+                                            <p class="mb-0 small text-muted">Password, CAPTCHA, expiration</p>
+                                        </div>
+                                        {% if url.is_password_protected or url.enable_captcha or url.expires_at %}
+                                        <span class="badge bg-success ms-auto">Active</span>
+                                        {% else %}
+                                        <i class="fas fa-chevron-right ms-auto text-muted"></i>
+                                        {% endif %}
+                                    </a>
                                     <a href="{% url 'analytics:url_stats' url.short_code %}" class="list-group-item list-group-item-action d-flex align-items-center">
                                         <i class="fas fa-chart-bar me-3 text-info"></i>
                                         <div>

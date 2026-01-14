@@ -1,17 +1,22 @@
+import random
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.generic import ListView, CreateView, DetailView, UpdateView
 from django.urls import reverse_lazy, reverse
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.forms import inlineformset_factory
+from django.views.decorators.http import require_http_methods
+from django.utils import timezone
 from .models import (
     URL, ClickData, DeviceTarget, RotationGroup,
-    RotationURL, CustomDomain, DomainURL
+    RotationURL, CustomDomain, DomainURL, TimeSchedule,
+    Funnel, FunnelStep, FunnelEvent, LinkAccessLog
 )
 from .forms import URLShortenerForm
 from .services.geolocation import GeoLocationService
 from .services.qrcode_service import QRCodeService
 from .services.domain_verification import DomainVerificationService
+from .services.realtime import RealTimeAnalyticsService
 import user_agents
 
 
@@ -97,22 +102,43 @@ class URLSuccessView(DetailView):
 def redirect_to_original(request, short_code):
     """Redirect to the original URL and record click data"""
     url = get_object_or_404(URL, short_code=short_code)
-
-    # Extract client info including geolocation
     client_info = extract_client_info(request)
 
-    # Determine destination URL (priority: rotation > device targeting > original)
+    # Check if link is expired
+    if url.is_expired():
+        LinkAccessLog.objects.create(
+            url=url,
+            access_type='expired',
+            ip_address=client_info.get('ip_address'),
+            user_agent=client_info.get('user_agent', '')
+        )
+        if url.expired_redirect_url:
+            return redirect(url.expired_redirect_url)
+        return render(request, 'shortener/expired.html', {'url': url})
+
+    # Check if gate is required (password or captcha)
+    if url.requires_gate():
+        # Check if user has already passed the gate (via session)
+        gate_key = f'gate_passed_{url.short_code}'
+        if not request.session.get(gate_key):
+            return redirect('shortener:gate', short_code=short_code)
+
+    # Determine destination URL (priority: time-based > rotation > device targeting > original)
     destination_url = url.original_url
     rotation_url = None
     device_target = None
 
-    # Check rotation first
-    if url.enable_rotation:
+    # Time-based redirect takes highest priority
+    if url.enable_time_based:
+        destination_url = url.get_time_based_destination()
+
+    # Then check rotation
+    elif url.enable_rotation:
         destination_url, rotation_url = url.get_rotation_destination()
         if rotation_url:
             rotation_url.increment_clicks()
 
-    # Device targeting can work if rotation is not enabled
+    # Device targeting
     elif url.enable_device_targeting:
         destination_url = url.get_destination_for_device({
             'device_type': client_info.get('device_type'),
@@ -124,7 +150,7 @@ def redirect_to_original(request, short_code):
         ).first()
 
     # Record click data for analytics
-    ClickData.objects.create(
+    click_data = ClickData.objects.create(
         url=url,
         served_url=destination_url,
         device_target=device_target,
@@ -135,7 +161,32 @@ def redirect_to_original(request, short_code):
     # Increment click counter
     url.increment_clicks()
 
+    # Broadcast to real-time analytics
+    RealTimeAnalyticsService.broadcast_click(url, client_info)
+
+    # Track funnel events if URL is part of a funnel
+    _track_funnel_event(url, click_data, client_info)
+
     return redirect(destination_url)
+
+
+def _track_funnel_event(url, click_data, client_info):
+    """Track funnel events for this URL"""
+    funnel_steps = url.funnel_steps.filter(funnel__is_active=True)
+
+    for step in funnel_steps:
+        visitor_id = FunnelEvent.generate_visitor_id(
+            client_info.get('ip_address', ''),
+            client_info.get('user_agent', '')
+        )
+
+        FunnelEvent.objects.create(
+            funnel=step.funnel,
+            step=step,
+            visitor_id=visitor_id,
+            ip_address=client_info.get('ip_address'),
+            click_data=click_data
+        )
 
 
 class URLListView(ListView):
@@ -376,3 +427,292 @@ def generate_qr_code(request, short_code):
         response = HttpResponse(buffer.getvalue(), content_type='image/png')
         response['Content-Disposition'] = f'attachment; filename="{short_code}_qr.png"'
         return response
+
+
+# ============= Gate Views (Password/CAPTCHA) =============
+
+def gate_view(request, short_code):
+    """Handle password and CAPTCHA gates"""
+    url = get_object_or_404(URL, short_code=short_code)
+    client_info = extract_client_info(request)
+
+    # Check if expired
+    if url.is_expired():
+        return render(request, 'shortener/expired.html', {'url': url})
+
+    # Generate simple math CAPTCHA
+    captcha_data = None
+    if url.enable_captcha and url.captcha_type == 'simple':
+        num1 = random.randint(1, 10)
+        num2 = random.randint(1, 10)
+        request.session['captcha_answer'] = num1 + num2
+        captcha_data = {'num1': num1, 'num2': num2}
+
+    context = {
+        'url': url,
+        'requires_password': url.is_password_protected(),
+        'requires_captcha': url.enable_captcha,
+        'captcha_type': url.captcha_type,
+        'captcha_data': captcha_data,
+        'password_hint': url.password_hint,
+        'error': None,
+    }
+
+    if request.method == 'POST':
+        password_ok = True
+        captcha_ok = True
+
+        # Verify password
+        if url.is_password_protected():
+            password = request.POST.get('password', '')
+            if not url.check_password(password):
+                password_ok = False
+                context['error'] = 'Incorrect password'
+                LinkAccessLog.objects.create(
+                    url=url,
+                    access_type='password_fail',
+                    ip_address=client_info.get('ip_address'),
+                    user_agent=client_info.get('user_agent', '')
+                )
+
+        # Verify CAPTCHA
+        if url.enable_captcha and password_ok:
+            if url.captcha_type == 'simple':
+                user_answer = request.POST.get('captcha_answer', '')
+                correct_answer = request.session.get('captcha_answer')
+                try:
+                    if int(user_answer) != correct_answer:
+                        captcha_ok = False
+                        context['error'] = 'Incorrect CAPTCHA answer'
+                except (ValueError, TypeError):
+                    captcha_ok = False
+                    context['error'] = 'Invalid CAPTCHA answer'
+
+                if not captcha_ok:
+                    LinkAccessLog.objects.create(
+                        url=url,
+                        access_type='captcha_fail',
+                        ip_address=client_info.get('ip_address'),
+                        user_agent=client_info.get('user_agent', '')
+                    )
+            # Add reCAPTCHA/hCaptcha verification here if needed
+
+        if password_ok and captcha_ok:
+            # Mark gate as passed in session
+            request.session[f'gate_passed_{url.short_code}'] = True
+
+            # Log success
+            if url.is_password_protected():
+                LinkAccessLog.objects.create(
+                    url=url,
+                    access_type='password_success',
+                    ip_address=client_info.get('ip_address'),
+                    user_agent=client_info.get('user_agent', '')
+                )
+            if url.enable_captcha:
+                LinkAccessLog.objects.create(
+                    url=url,
+                    access_type='captcha_success',
+                    ip_address=client_info.get('ip_address'),
+                    user_agent=client_info.get('user_agent', '')
+                )
+
+            return redirect('shortener:redirect', short_code=short_code)
+
+        # Regenerate CAPTCHA on failure
+        if url.enable_captcha and url.captcha_type == 'simple':
+            num1 = random.randint(1, 10)
+            num2 = random.randint(1, 10)
+            request.session['captcha_answer'] = num1 + num2
+            context['captcha_data'] = {'num1': num1, 'num2': num2}
+
+    return render(request, 'shortener/gate.html', context)
+
+
+# ============= Link Settings Views =============
+
+class URLSettingsView(UpdateView):
+    """View for managing link expiration, password, and CAPTCHA settings"""
+    model = URL
+    template_name = 'shortener/link_settings.html'
+    fields = [
+        'expires_at', 'max_clicks', 'expired_redirect_url',
+        'enable_captcha', 'captcha_type', 'password_hint'
+    ]
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['short_url'] = self.request.build_absolute_uri(
+            reverse('shortener:redirect', kwargs={'short_code': self.object.short_code})
+        )
+        context['has_password'] = self.object.is_password_protected()
+        return context
+
+    def form_valid(self, form):
+        # Handle password separately
+        new_password = self.request.POST.get('new_password')
+        remove_password = self.request.POST.get('remove_password')
+
+        self.object = form.save(commit=False)
+
+        if remove_password:
+            self.object.password_hash = ''
+        elif new_password:
+            self.object.set_password(new_password)
+
+        self.object.save()
+        messages.success(self.request, 'Link settings saved successfully.')
+        return redirect('shortener:success', pk=self.object.pk)
+
+
+# ============= Time-Based Redirect Views =============
+
+TimeScheduleFormSet = inlineformset_factory(
+    URL, TimeSchedule,
+    fields=['destination_url', 'label', 'start_time', 'end_time',
+            'start_date', 'end_date', 'weekdays', 'timezone_name', 'priority', 'is_active'],
+    extra=1,
+    can_delete=True,
+)
+
+
+class TimeBasedRedirectView(UpdateView):
+    """View for managing time-based redirects"""
+    model = URL
+    template_name = 'shortener/time_based.html'
+    fields = ['enable_time_based']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.POST:
+            context['formset'] = TimeScheduleFormSet(self.request.POST, instance=self.object)
+        else:
+            context['formset'] = TimeScheduleFormSet(instance=self.object)
+        context['short_url'] = self.request.build_absolute_uri(
+            reverse('shortener:redirect', kwargs={'short_code': self.object.short_code})
+        )
+        context['current_time'] = timezone.now()
+        return context
+
+    def form_valid(self, form):
+        context = self.get_context_data()
+        formset = context['formset']
+        if formset.is_valid():
+            self.object = form.save()
+            formset.instance = self.object
+            formset.save()
+            messages.success(self.request, 'Time-based redirect settings saved.')
+            return redirect('shortener:success', pk=self.object.pk)
+        return self.render_to_response(context)
+
+
+# ============= Funnel Views =============
+
+class FunnelListView(ListView):
+    """List all funnels"""
+    model = Funnel
+    template_name = 'shortener/funnel_list.html'
+    context_object_name = 'funnels'
+
+
+class FunnelDetailView(DetailView):
+    """View funnel analytics"""
+    model = Funnel
+    template_name = 'shortener/funnel_detail.html'
+    context_object_name = 'funnel'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        funnel = self.object
+
+        # Get step-by-step analytics
+        steps = funnel.steps.order_by('order')
+        step_data = []
+
+        for step in steps:
+            step_data.append({
+                'step': step,
+                'unique_visitors': step.get_unique_visitors(),
+                'total_clicks': step.get_total_clicks(),
+                'conversion_to_next': step.get_conversion_to_next(),
+            })
+
+        context['step_data'] = step_data
+        context['overall_conversion'] = funnel.get_conversion_rate()
+
+        return context
+
+
+class FunnelCreateView(CreateView):
+    """Create a new funnel"""
+    model = Funnel
+    template_name = 'shortener/funnel_create.html'
+    fields = ['name', 'description']
+    success_url = reverse_lazy('shortener:funnel_list')
+
+
+FunnelStepFormSet = inlineformset_factory(
+    Funnel, FunnelStep,
+    fields=['url', 'name', 'order'],
+    extra=3,
+    can_delete=True,
+)
+
+
+class FunnelEditView(UpdateView):
+    """Edit funnel steps"""
+    model = Funnel
+    template_name = 'shortener/funnel_edit.html'
+    fields = ['name', 'description', 'is_active']
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.request.POST:
+            context['step_formset'] = FunnelStepFormSet(self.request.POST, instance=self.object)
+        else:
+            context['step_formset'] = FunnelStepFormSet(instance=self.object)
+        return context
+
+    def form_valid(self, form):
+        context = self.get_context_data()
+        step_formset = context['step_formset']
+        if step_formset.is_valid():
+            self.object = form.save()
+            step_formset.instance = self.object
+            step_formset.save()
+            messages.success(self.request, 'Funnel updated successfully.')
+            return redirect('shortener:funnel_detail', pk=self.object.pk)
+        return self.render_to_response(context)
+
+
+# ============= Real-Time Analytics Views =============
+
+def realtime_dashboard(request):
+    """Real-time analytics dashboard"""
+    stats = RealTimeAnalyticsService.get_live_stats()
+    recent_clicks = RealTimeAnalyticsService.get_recent_clicks(20)
+
+    return render(request, 'shortener/realtime_dashboard.html', {
+        'stats': stats,
+        'recent_clicks': recent_clicks,
+    })
+
+
+def api_realtime_stats(request):
+    """API endpoint for real-time statistics"""
+    stats = RealTimeAnalyticsService.get_live_stats()
+    return JsonResponse({'success': True, 'data': stats})
+
+
+def api_realtime_clicks(request):
+    """API endpoint for recent clicks"""
+    limit = int(request.GET.get('limit', 20))
+    clicks = RealTimeAnalyticsService.get_recent_clicks(limit)
+    return JsonResponse({'success': True, 'data': clicks})
+
+
+def api_clicks_per_minute(request):
+    """API endpoint for clicks per minute"""
+    minutes = int(request.GET.get('minutes', 60))
+    data = RealTimeAnalyticsService.get_clicks_per_minute(minutes)
+    return JsonResponse({'success': True, 'data': data})

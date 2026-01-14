@@ -1,8 +1,10 @@
 import string
 import random
 import secrets
+import hashlib
 from django.db import models
 from django.utils import timezone
+from django.contrib.auth.hashers import make_password, check_password
 
 
 class URL(models.Model):
@@ -14,6 +16,24 @@ class URL(models.Model):
     # Feature flags
     enable_device_targeting = models.BooleanField(default=False)
     enable_rotation = models.BooleanField(default=False)
+    enable_time_based = models.BooleanField(default=False)
+
+    # Link expiration
+    expires_at = models.DateTimeField(null=True, blank=True, help_text="Link expires after this date")
+    max_clicks = models.PositiveIntegerField(null=True, blank=True, help_text="Link expires after this many clicks")
+    expired_redirect_url = models.URLField(max_length=500, blank=True, help_text="Redirect here when expired")
+
+    # Password protection
+    password_hash = models.CharField(max_length=128, blank=True, help_text="Hashed password for protection")
+    password_hint = models.CharField(max_length=100, blank=True, help_text="Optional hint for password")
+
+    # CAPTCHA gate
+    enable_captcha = models.BooleanField(default=False)
+    captcha_type = models.CharField(max_length=20, default='simple', choices=[
+        ('simple', 'Simple Math'),
+        ('recaptcha', 'Google reCAPTCHA'),
+        ('hcaptcha', 'hCaptcha'),
+    ])
 
     class Meta:
         ordering = ['-created_at']
@@ -88,6 +108,56 @@ class URL(models.Model):
             return rotation_url.destination_url, rotation_url
 
         return self.original_url, None
+
+    def get_time_based_destination(self) -> str:
+        """Get destination URL based on current time schedule"""
+        if not self.enable_time_based:
+            return self.original_url
+
+        now = timezone.now()
+        schedules = self.time_schedules.filter(is_active=True)
+
+        for schedule in schedules:
+            if schedule.is_active_now(now):
+                return schedule.destination_url
+
+        return self.original_url
+
+    def is_expired(self) -> bool:
+        """Check if the link has expired"""
+        now = timezone.now()
+
+        # Check date expiration
+        if self.expires_at and now > self.expires_at:
+            return True
+
+        # Check click limit
+        if self.max_clicks and self.clicks >= self.max_clicks:
+            return True
+
+        return False
+
+    def set_password(self, raw_password: str):
+        """Set password for the link"""
+        self.password_hash = make_password(raw_password)
+
+    def check_password(self, raw_password: str) -> bool:
+        """Check if provided password matches"""
+        if not self.password_hash:
+            return True
+        return check_password(raw_password, self.password_hash)
+
+    def is_password_protected(self) -> bool:
+        """Check if link is password protected"""
+        return bool(self.password_hash)
+
+    def requires_captcha(self) -> bool:
+        """Check if link requires CAPTCHA"""
+        return self.enable_captcha
+
+    def requires_gate(self) -> bool:
+        """Check if any gate (password/captcha) is required"""
+        return self.is_password_protected() or self.requires_captcha()
 
 
 class ClickData(models.Model):
@@ -305,3 +375,217 @@ class DomainURL(models.Model):
         protocol = 'https' if self.custom_domain.ssl_enabled else 'http'
         path = self.custom_path or self.url.short_code
         return f"{protocol}://{self.custom_domain.domain}/{path}"
+
+
+class TimeSchedule(models.Model):
+    """Time-based redirect schedules"""
+
+    WEEKDAYS = [
+        (0, 'Monday'),
+        (1, 'Tuesday'),
+        (2, 'Wednesday'),
+        (3, 'Thursday'),
+        (4, 'Friday'),
+        (5, 'Saturday'),
+        (6, 'Sunday'),
+    ]
+
+    url = models.ForeignKey(URL, on_delete=models.CASCADE, related_name='time_schedules')
+    destination_url = models.URLField(max_length=500)
+    label = models.CharField(max_length=100, blank=True, help_text="e.g., 'Business Hours', 'Weekend'")
+
+    # Time constraints
+    start_time = models.TimeField(null=True, blank=True, help_text="Start time (leave empty for all day)")
+    end_time = models.TimeField(null=True, blank=True, help_text="End time (leave empty for all day)")
+
+    # Date constraints
+    start_date = models.DateField(null=True, blank=True, help_text="Start date (leave empty for no limit)")
+    end_date = models.DateField(null=True, blank=True, help_text="End date (leave empty for no limit)")
+
+    # Weekday constraints (stored as comma-separated integers)
+    weekdays = models.CharField(max_length=20, blank=True, help_text="Comma-separated weekday numbers (0=Mon, 6=Sun)")
+
+    # Timezone for the schedule
+    timezone_name = models.CharField(max_length=50, default='UTC')
+
+    priority = models.PositiveIntegerField(default=0, help_text="Higher priority schedules are checked first")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-priority', 'created_at']
+
+    def __str__(self):
+        return f"{self.url.short_code}: {self.label or self.destination_url[:30]}"
+
+    def get_weekdays_list(self):
+        """Get list of active weekdays as integers"""
+        if not self.weekdays:
+            return list(range(7))  # All days if not specified
+        return [int(d.strip()) for d in self.weekdays.split(',') if d.strip().isdigit()]
+
+    def is_active_now(self, now=None) -> bool:
+        """Check if this schedule is currently active"""
+        import pytz
+
+        if now is None:
+            now = timezone.now()
+
+        # Convert to schedule's timezone
+        try:
+            tz = pytz.timezone(self.timezone_name)
+            local_now = now.astimezone(tz)
+        except Exception:
+            local_now = now
+
+        # Check date range
+        today = local_now.date()
+        if self.start_date and today < self.start_date:
+            return False
+        if self.end_date and today > self.end_date:
+            return False
+
+        # Check weekday
+        if local_now.weekday() not in self.get_weekdays_list():
+            return False
+
+        # Check time range
+        current_time = local_now.time()
+        if self.start_time and self.end_time:
+            if self.start_time <= self.end_time:
+                # Normal range (e.g., 9:00 - 17:00)
+                if not (self.start_time <= current_time <= self.end_time):
+                    return False
+            else:
+                # Overnight range (e.g., 22:00 - 06:00)
+                if not (current_time >= self.start_time or current_time <= self.end_time):
+                    return False
+        elif self.start_time:
+            if current_time < self.start_time:
+                return False
+        elif self.end_time:
+            if current_time > self.end_time:
+                return False
+
+        return True
+
+
+class Funnel(models.Model):
+    """Funnel for tracking multi-step conversions"""
+
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
+
+    def get_conversion_rate(self):
+        """Calculate overall funnel conversion rate"""
+        steps = self.steps.order_by('order')
+        if steps.count() < 2:
+            return 0
+
+        first_step = steps.first()
+        last_step = steps.last()
+
+        first_count = first_step.get_unique_visitors()
+        last_count = last_step.get_unique_visitors()
+
+        if first_count == 0:
+            return 0
+        return round((last_count / first_count) * 100, 2)
+
+
+class FunnelStep(models.Model):
+    """Individual step in a funnel"""
+
+    funnel = models.ForeignKey(Funnel, on_delete=models.CASCADE, related_name='steps')
+    url = models.ForeignKey(URL, on_delete=models.CASCADE, related_name='funnel_steps')
+    name = models.CharField(max_length=100, help_text="e.g., 'Landing Page', 'Signup', 'Purchase'")
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['funnel', 'order']
+        unique_together = ['funnel', 'order']
+
+    def __str__(self):
+        return f"{self.funnel.name} - Step {self.order}: {self.name}"
+
+    def get_unique_visitors(self):
+        """Get count of unique visitors to this step"""
+        return ClickData.objects.filter(url=self.url).values('ip_address').distinct().count()
+
+    def get_total_clicks(self):
+        """Get total clicks for this step"""
+        return self.url.clicks
+
+    def get_conversion_to_next(self):
+        """Get conversion rate to next step"""
+        next_step = self.funnel.steps.filter(order__gt=self.order).order_by('order').first()
+        if not next_step:
+            return None
+
+        current_visitors = self.get_unique_visitors()
+        next_visitors = next_step.get_unique_visitors()
+
+        if current_visitors == 0:
+            return 0
+        return round((next_visitors / current_visitors) * 100, 2)
+
+
+class FunnelEvent(models.Model):
+    """Track visitor progress through funnel"""
+
+    funnel = models.ForeignKey(Funnel, on_delete=models.CASCADE, related_name='events')
+    step = models.ForeignKey(FunnelStep, on_delete=models.CASCADE, related_name='events')
+    visitor_id = models.CharField(max_length=64, help_text="Hashed identifier for visitor")
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    timestamp = models.DateTimeField(default=timezone.now)
+
+    # Reference to click data
+    click_data = models.ForeignKey(
+        ClickData, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='funnel_events'
+    )
+
+    class Meta:
+        ordering = ['funnel', 'visitor_id', 'timestamp']
+
+    def __str__(self):
+        return f"{self.funnel.name} - {self.step.name} - {self.visitor_id[:8]}"
+
+    @staticmethod
+    def generate_visitor_id(ip_address: str, user_agent: str) -> str:
+        """Generate a consistent visitor ID from IP and user agent"""
+        raw = f"{ip_address}:{user_agent}"
+        return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+class LinkAccessLog(models.Model):
+    """Log for password/captcha attempts and access"""
+
+    ACCESS_TYPES = [
+        ('password_success', 'Password Success'),
+        ('password_fail', 'Password Failed'),
+        ('captcha_success', 'CAPTCHA Success'),
+        ('captcha_fail', 'CAPTCHA Failed'),
+        ('expired', 'Expired Link'),
+    ]
+
+    url = models.ForeignKey(URL, on_delete=models.CASCADE, related_name='access_logs')
+    access_type = models.CharField(max_length=20, choices=ACCESS_TYPES)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    timestamp = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f"{self.url.short_code}: {self.access_type} at {self.timestamp}"
