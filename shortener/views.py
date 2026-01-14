@@ -1296,3 +1296,279 @@ def api_generate_utm_url(request):
     final_url = urlunparse(parsed._replace(query=new_query))
 
     return JsonResponse({'success': True, 'url': final_url})
+
+
+# ============= Advanced ML Analytics API =============
+
+def api_traffic_forecast(request):
+    """API: Get traffic forecast"""
+    from .services.forecasting import ForecastingService, ForecastGranularity
+
+    url_id = request.GET.get('url_id')
+    periods = int(request.GET.get('periods', 7))
+    granularity = request.GET.get('granularity', 'daily')
+
+    service = ForecastingService()
+
+    granularity_map = {
+        'hourly': ForecastGranularity.HOURLY,
+        'daily': ForecastGranularity.DAILY,
+        'weekly': ForecastGranularity.WEEKLY
+    }
+
+    result = service.get_forecast(
+        url_id=int(url_id) if url_id else None,
+        periods=periods,
+        granularity=granularity_map.get(granularity, ForecastGranularity.DAILY)
+    )
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_anomaly_detection(request):
+    """API: Detect traffic anomalies"""
+    from .services.forecasting import ForecastingService
+
+    url_id = request.GET.get('url_id')
+    days = int(request.GET.get('days', 30))
+
+    service = ForecastingService()
+    result = service.get_anomalies(
+        url_id=int(url_id) if url_id else None,
+        days_back=days
+    )
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_seasonal_patterns(request):
+    """API: Get seasonal traffic patterns"""
+    from .services.forecasting import ForecastingService
+
+    url_id = request.GET.get('url_id')
+
+    service = ForecastingService()
+    result = service.get_seasonal_patterns(
+        url_id=int(url_id) if url_id else None
+    )
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_bot_analysis(request):
+    """API: Analyze click for bot probability"""
+    from .services.bot_detection import BotDetectionService
+
+    ip = request.GET.get('ip', get_client_ip(request))
+    user_agent = request.GET.get('user_agent', request.META.get('HTTP_USER_AGENT', ''))
+
+    service = BotDetectionService()
+    result = service.analyze_click(
+        ip=ip,
+        user_agent=user_agent,
+        referer=request.META.get('HTTP_REFERER'),
+        accept_language=request.META.get('HTTP_ACCEPT_LANGUAGE')
+    )
+
+    return JsonResponse({'success': True, 'data': result.to_dict()})
+
+
+def api_bot_stats(request):
+    """API: Get bot detection statistics"""
+    from .services.bot_detection import BotDetectionService
+
+    days = int(request.GET.get('days', 7))
+
+    service = BotDetectionService()
+    result = service.get_stats(days_back=days)
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_bayesian_ab_results(request, test_id):
+    """API: Get Bayesian A/B test analysis"""
+    from .services.bayesian_ab import BayesianABTestAnalyzer
+
+    test = get_object_or_404(ABTest, pk=test_id)
+    analyzer = BayesianABTestAnalyzer()
+    result = analyzer.analyze_test(test_id)
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_bandit_allocation(request, test_id):
+    """API: Get bandit traffic allocation"""
+    from .services.bandit import BanditOptimizer
+
+    algorithm = request.GET.get('algorithm', 'thompson')
+    optimizer = BanditOptimizer(algorithm=algorithm)
+    result = optimizer.get_current_allocation(test_id)
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_bandit_select_variant(request, test_id):
+    """API: Select variant using bandit algorithm"""
+    from .services.bandit import BanditOptimizer
+
+    algorithm = request.GET.get('algorithm', 'thompson')
+    optimizer = BanditOptimizer(algorithm=algorithm)
+    result = optimizer.get_variant_for_visitor(test_id)
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_conversion_prediction(request):
+    """API: Get conversion prediction for visitor"""
+    from .services.conversion_prediction import ConversionPredictionService
+
+    ip = request.GET.get('ip', get_client_ip(request))
+    session_id = request.GET.get('session_id')
+
+    service = ConversionPredictionService()
+    result = service.get_visitor_prediction(ip, session_id)
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_lead_score(request):
+    """API: Real-time lead scoring for frontend"""
+    from .services.conversion_prediction import ConversionPredictionService
+
+    ip = get_client_ip(request)
+    session_id = request.GET.get('session_id')
+    page_url = request.GET.get('page_url')
+
+    service = ConversionPredictionService()
+    result = service.get_real_time_score_api(ip, session_id, page_url)
+
+    return JsonResponse(result)
+
+
+def api_ab_winner_prediction(request, test_id):
+    """API: Predict A/B test winner"""
+    from .services.conversion_prediction import ConversionPredictionService
+
+    service = ConversionPredictionService()
+    result = service.predict_ab_test_winner(test_id)
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_nlp_classify_referrer(request):
+    """API: Classify referrer using NLP"""
+    from .services.nlp_classification import NLPClassificationService
+
+    referrer = request.GET.get('referrer', '')
+
+    service = NLPClassificationService()
+    result = service.classify_referrer(referrer)
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_spam_referrers(request):
+    """API: Detect spam referrers"""
+    from .services.nlp_classification import NLPClassificationService
+
+    days = int(request.GET.get('days', 7))
+
+    service = NLPClassificationService()
+    result = service.detect_spam_referrers(days_back=days)
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_traffic_breakdown(request):
+    """API: Get traffic breakdown by source category"""
+    from .services.nlp_classification import NLPClassificationService
+
+    days = int(request.GET.get('days', 30))
+
+    service = NLPClassificationService()
+    result = service.get_traffic_breakdown(days_back=days)
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_auto_tag_url(request):
+    """API: Auto-generate tags for URL"""
+    from .services.nlp_classification import NLPClassificationService
+
+    url = request.GET.get('url', '')
+    referrer = request.GET.get('referrer')
+
+    if not url:
+        return JsonResponse({'success': False, 'error': 'URL required'}, status=400)
+
+    service = NLPClassificationService()
+    result = service.auto_tag_url(url, referrer)
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_pandas_analytics(request):
+    """API: Get comprehensive pandas analytics"""
+    from .services.pandas_analytics import PandasAnalyticsService
+
+    url_id = request.GET.get('url_id')
+    days = int(request.GET.get('days', 30))
+
+    service = PandasAnalyticsService()
+    result = service.get_comprehensive_analytics(
+        url_id=int(url_id) if url_id else None,
+        days_back=days
+    )
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_attribution_report(request):
+    """API: Get attribution report"""
+    from .services.pandas_analytics import PandasAnalyticsService
+
+    days = int(request.GET.get('days', 30))
+    model = request.GET.get('model', 'linear')
+
+    service = PandasAnalyticsService()
+    result = service.get_attribution_report(days_back=days, model=model)
+
+    return JsonResponse({'success': True, 'data': result})
+
+
+def api_export_data(request):
+    """API: Export click data"""
+    from .services.pandas_analytics import PandasAnalyticsService
+
+    url_id = request.GET.get('url_id')
+    days = int(request.GET.get('days', 30))
+    format_type = request.GET.get('format', 'csv')
+
+    service = PandasAnalyticsService()
+
+    try:
+        data = service.export_data(
+            url_id=int(url_id) if url_id else None,
+            days_back=days,
+            format=format_type
+        )
+
+        if format_type == 'csv':
+            response = HttpResponse(data, content_type='text/csv')
+            response['Content-Disposition'] = 'attachment; filename="analytics_export.csv"'
+        elif format_type == 'json':
+            response = HttpResponse(data, content_type='application/json')
+            response['Content-Disposition'] = 'attachment; filename="analytics_export.json"'
+        elif format_type == 'excel':
+            response = HttpResponse(
+                data,
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = 'attachment; filename="analytics_export.xlsx"'
+        else:
+            return JsonResponse({'success': False, 'error': f'Unknown format: {format_type}'}, status=400)
+
+        return response
+
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)

@@ -89,6 +89,40 @@ urlpatterns = [
     path('utm-builder/', views.utm_builder, name='utm_builder'),
     path('api/utm/generate/', views.api_generate_utm_url, name='api_generate_utm'),
 
+    # ============= ML Analytics API =============
+
+    # Traffic Forecasting
+    path('api/ml/forecast/', views.api_traffic_forecast, name='api_forecast'),
+    path('api/ml/anomalies/', views.api_anomaly_detection, name='api_anomalies'),
+    path('api/ml/seasonal/', views.api_seasonal_patterns, name='api_seasonal'),
+
+    # Bot Detection
+    path('api/ml/bot-analysis/', views.api_bot_analysis, name='api_bot_analysis'),
+    path('api/ml/bot-stats/', views.api_bot_stats, name='api_bot_stats'),
+
+    # Bayesian A/B Testing
+    path('api/ml/bayesian/<int:test_id>/', views.api_bayesian_ab_results, name='api_bayesian_results'),
+
+    # Multi-Armed Bandit
+    path('api/ml/bandit/<int:test_id>/allocation/', views.api_bandit_allocation, name='api_bandit_allocation'),
+    path('api/ml/bandit/<int:test_id>/select/', views.api_bandit_select_variant, name='api_bandit_select'),
+
+    # Conversion Prediction
+    path('api/ml/conversion-prediction/', views.api_conversion_prediction, name='api_conversion_prediction'),
+    path('api/ml/lead-score/', views.api_lead_score, name='api_lead_score'),
+    path('api/ml/ab-winner/<int:test_id>/', views.api_ab_winner_prediction, name='api_ab_winner'),
+
+    # NLP Classification
+    path('api/ml/classify-referrer/', views.api_nlp_classify_referrer, name='api_classify_referrer'),
+    path('api/ml/spam-referrers/', views.api_spam_referrers, name='api_spam_referrers'),
+    path('api/ml/traffic-breakdown/', views.api_traffic_breakdown, name='api_traffic_breakdown'),
+    path('api/ml/auto-tag/', views.api_auto_tag_url, name='api_auto_tag'),
+
+    # Pandas Analytics
+    path('api/analytics/comprehensive/', views.api_pandas_analytics, name='api_pandas_analytics'),
+    path('api/analytics/attribution/', views.api_attribution_report, name='api_attribution_report'),
+    path('api/analytics/export/', views.api_export_data, name='api_export_data'),
+
     # Redirect (must be last - catches all short codes)
     path('<str:short_code>/', views.redirect_to_original, name='redirect'),
 ]
