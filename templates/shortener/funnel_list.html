@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block title %}Funnel Analytics{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-filter me-2"></i>Funnel Analytics</h2>
+        <a href="{% url 'shortener:funnel_create' %}" class="btn btn-primary">
+            <i class="fas fa-plus me-2"></i>Create Funnel
+        </a>
+    </div>
+
+    {% if funnels %}
+    <div class="row">
+        {% for funnel in funnels %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">{{ funnel.name }}</h6>
+                    {% if funnel.is_active %}
+                    <span class="badge bg-success">Active</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Inactive</span>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if funnel.description %}
+                    <p class="text-muted small">{{ funnel.description|truncatewords:20 }}</p>
+                    {% endif %}
+
+                    <div class="d-flex justify-content-between mb-3">
+                        <div class="text-center">
+                            <div class="h4 mb-0">{{ funnel.steps.count }}</div>
+                            <small class="text-muted">Steps</small>
+                        </div>
+                        <div class="text-center">
+                            <div class="h4 mb-0 text-primary">{{ funnel.get_conversion_rate }}%</div>
+                            <small class="text-muted">Conversion</small>
+                        </div>
+                    </div>
+
+                    <!-- Mini funnel visualization -->
+                    <div class="progress mb-2" style="height: 25px;">
+                        {% for step in funnel.steps.all %}
+                        <div class="progress-bar bg-{% cycle 'primary' 'info' 'success' 'warning' %}"
+                             style="width: {% widthratio 100 funnel.steps.count 1 %}%;"
+                             data-bs-toggle="tooltip"
+                             title="{{ step.name }}">
+                            {{ forloop.counter }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent">
+                    <div class="btn-group w-100">
+                        <a href="{% url 'shortener:funnel_detail' funnel.pk %}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-chart-line me-1"></i>View
+                        </a>
+                        <a href="{% url 'shortener:funnel_edit' funnel.pk %}" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-edit me-1"></i>Edit
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-5">
+        <i class="fas fa-filter text-muted mb-3" style="font-size: 4rem;"></i>
+        <h4>No Funnels Yet</h4>
+        <p class="text-muted">Create your first funnel to track multi-step conversions.</p>
+        <a href="{% url 'shortener:funnel_create' %}" class="btn btn-primary">
+            <i class="fas fa-plus me-2"></i>Create Your First Funnel
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}Create Funnel{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Create New Funnel</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label class="form-label">Funnel Name</label>
+                            <input type="text" name="name" class="form-control form-control-lg"
+                                   placeholder="e.g., Signup Funnel, Purchase Flow" required>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">Description (Optional)</label>
+                            <textarea name="description" class="form-control" rows="3"
+                                      placeholder="Describe the purpose of this funnel..."></textarea>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            After creating the funnel, you'll be able to add steps and link them to your shortened URLs.
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'shortener:funnel_list' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-plus me-2"></i>Create Funnel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,183 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ funnel.name }} - Funnel Analytics{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'shortener:funnel_list' %}">Funnels</a></li>
+                    <li class="breadcrumb-item active">{{ funnel.name }}</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-filter me-2"></i>{{ funnel.name }}</h2>
+            {% if funnel.description %}
+            <p class="text-muted mb-0">{{ funnel.description }}</p>
+            {% endif %}
+        </div>
+        <a href="{% url 'shortener:funnel_edit' funnel.pk %}" class="btn btn-outline-primary">
+            <i class="fas fa-edit me-2"></i>Edit Funnel
+        </a>
+    </div>
+
+    <!-- Overall Stats -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white shadow">
+                <div class="card-body text-center">
+                    <h3 class="mb-0">{{ overall_conversion }}%</h3>
+                    <small>Overall Conversion Rate</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow">
+                <div class="card-body text-center">
+                    <h3 class="mb-0 text-primary">{{ step_data.0.unique_visitors|default:0 }}</h3>
+                    <small class="text-muted">Top of Funnel Visitors</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow">
+                <div class="card-body text-center">
+                    <h3 class="mb-0 text-success">{{ step_data|last|default_if_none:'' }}</h3>
+                    <small class="text-muted">Conversions</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Funnel Visualization -->
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Funnel Steps</h5>
+        </div>
+        <div class="card-body">
+            {% if step_data %}
+            <div class="funnel-visualization">
+                {% for item in step_data %}
+                <div class="funnel-step mb-3">
+                    <div class="row align-items-center">
+                        <div class="col-md-3">
+                            <span class="badge bg-primary rounded-pill me-2">{{ forloop.counter }}</span>
+                            <strong>{{ item.step.name }}</strong>
+                            <br>
+                            <small class="text-muted">{{ item.step.url.short_code }}</small>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="progress" style="height: 40px;">
+                                {% widthratio item.unique_visitors step_data.0.unique_visitors 100 as width %}
+                                <div class="progress-bar bg-{% cycle 'primary' 'info' 'success' 'warning' %}"
+                                     style="width: {{ width|default:0 }}%;">
+                                    {{ item.unique_visitors }} visitors
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 text-end">
+                            <div class="h5 mb-0">{{ item.unique_visitors }}</div>
+                            <small class="text-muted">unique visitors</small>
+                            {% if item.conversion_to_next is not None %}
+                            <br>
+                            <span class="badge bg-{% if item.conversion_to_next >= 50 %}success{% elif item.conversion_to_next >= 25 %}warning{% else %}danger{% endif %}">
+                                {{ item.conversion_to_next }}% to next
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if not forloop.last %}
+                <div class="text-center my-2">
+                    <i class="fas fa-arrow-down text-muted"></i>
+                    {% if item.conversion_to_next is not None %}
+                    <span class="badge bg-light text-dark ms-2">
+                        {{ item.conversion_to_next }}% proceed
+                    </span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-4">
+                <p class="text-muted">No steps configured for this funnel yet.</p>
+                <a href="{% url 'shortener:funnel_edit' funnel.pk %}" class="btn btn-primary">
+                    Add Steps
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Detailed Stats Table -->
+    {% if step_data %}
+    <div class="card shadow">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-table me-2"></i>Detailed Statistics</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Step Name</th>
+                            <th>URL</th>
+                            <th class="text-end">Unique Visitors</th>
+                            <th class="text-end">Total Clicks</th>
+                            <th class="text-end">Conversion to Next</th>
+                            <th class="text-end">Drop-off</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in step_data %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            <td><strong>{{ item.step.name }}</strong></td>
+                            <td>
+                                <code>{{ item.step.url.short_code }}</code>
+                            </td>
+                            <td class="text-end">{{ item.unique_visitors }}</td>
+                            <td class="text-end">{{ item.total_clicks }}</td>
+                            <td class="text-end">
+                                {% if item.conversion_to_next is not None %}
+                                <span class="badge bg-{% if item.conversion_to_next >= 50 %}success{% elif item.conversion_to_next >= 25 %}warning{% else %}danger{% endif %}">
+                                    {{ item.conversion_to_next }}%
+                                </span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                {% if item.conversion_to_next is not None %}
+                                <span class="text-danger">{{ 100|add:"-"|add:item.conversion_to_next }}%</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.funnel-step {
+    padding: 10px;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+}
+</style>
+{% endblock %}
