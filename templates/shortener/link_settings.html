@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+
+{% block title %}Link Settings - {{ object.short_code }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'shortener:home' %}">Home</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'shortener:success' object.pk %}">{{ object.short_code }}</a></li>
+                    <li class="breadcrumb-item active">Settings</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-cog me-2"></i>Link Settings</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <!-- Expiration Settings -->
+                        <div class="mb-4">
+                            <h6 class="text-primary border-bottom pb-2">
+                                <i class="fas fa-clock me-2"></i>Link Expiration
+                            </h6>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Expires At</label>
+                                    <input type="datetime-local" name="expires_at" class="form-control"
+                                           value="{{ object.expires_at|date:'Y-m-d\TH:i' }}">
+                                    <small class="form-text text-muted">Leave empty for no expiration</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Max Clicks</label>
+                                    <input type="number" name="max_clicks" class="form-control"
+                                           value="{{ object.max_clicks }}" min="1" placeholder="Unlimited">
+                                    <small class="form-text text-muted">Link expires after this many clicks</small>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Expired Redirect URL</label>
+                                <input type="url" name="expired_redirect_url" class="form-control"
+                                       value="{{ object.expired_redirect_url }}"
+                                       placeholder="https://example.com/expired">
+                                <small class="form-text text-muted">
+                                    Redirect users here when the link expires (optional)
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Password Protection -->
+                        <div class="mb-4">
+                            <h6 class="text-primary border-bottom pb-2">
+                                <i class="fas fa-lock me-2"></i>Password Protection
+                            </h6>
+
+                            {% if has_password %}
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                This link is currently password protected.
+                            </div>
+                            <div class="form-check mb-3">
+                                <input type="checkbox" name="remove_password" class="form-check-input" id="removePassword">
+                                <label class="form-check-label" for="removePassword">Remove password protection</label>
+                            </div>
+                            {% endif %}
+
+                            <div class="mb-3">
+                                <label class="form-label">
+                                    {% if has_password %}Change Password{% else %}Set Password{% endif %}
+                                </label>
+                                <input type="password" name="new_password" class="form-control"
+                                       placeholder="Enter new password">
+                                <small class="form-text text-muted">Leave empty to keep current password</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Password Hint</label>
+                                <input type="text" name="password_hint" class="form-control"
+                                       value="{{ object.password_hint }}"
+                                       placeholder="e.g., Company name">
+                                <small class="form-text text-muted">
+                                    Optional hint shown to users (don't make it too obvious!)
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- CAPTCHA Settings -->
+                        <div class="mb-4">
+                            <h6 class="text-primary border-bottom pb-2">
+                                <i class="fas fa-robot me-2"></i>CAPTCHA Gate
+                            </h6>
+
+                            <div class="form-check form-switch mb-3">
+                                <input type="checkbox" name="enable_captcha" class="form-check-input"
+                                       id="enableCaptcha" {% if object.enable_captcha %}checked{% endif %}>
+                                <label class="form-check-label" for="enableCaptcha">
+                                    Enable CAPTCHA verification
+                                </label>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">CAPTCHA Type</label>
+                                <select name="captcha_type" class="form-select">
+                                    <option value="simple" {% if object.captcha_type == 'simple' %}selected{% endif %}>
+                                        Simple Math (No API required)
+                                    </option>
+                                    <option value="recaptcha" {% if object.captcha_type == 'recaptcha' %}selected{% endif %}>
+                                        Google reCAPTCHA (Requires API key)
+                                    </option>
+                                    <option value="hcaptcha" {% if object.captcha_type == 'hcaptcha' %}selected{% endif %}>
+                                        hCaptcha (Requires API key)
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'shortener:success' object.pk %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Back
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Save Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-link me-2"></i>Link Info</h6>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2">
+                        <strong>Short Code:</strong> {{ object.short_code }}
+                    </p>
+                    <p class="mb-2">
+                        <strong>Total Clicks:</strong> {{ object.clicks }}
+                    </p>
+                    <p class="mb-2">
+                        <strong>Created:</strong> {{ object.created_at|date:"M d, Y" }}
+                    </p>
+                    <p class="mb-0 text-truncate">
+                        <strong>Original URL:</strong><br>
+                        <small><a href="{{ object.original_url }}" target="_blank">{{ object.original_url }}</a></small>
+                    </p>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>About Gates</h6>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        <strong>Password Protection:</strong> Require users to enter a password before accessing the link.
+                    </p>
+                    <p class="small text-muted mb-2">
+                        <strong>CAPTCHA:</strong> Prevent bots from clicking your links by requiring human verification.
+                    </p>
+                    <p class="small text-muted mb-0">
+                        <strong>Expiration:</strong> Automatically disable the link after a date or number of clicks.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
