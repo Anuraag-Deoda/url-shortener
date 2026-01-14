@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+
+{% block title %}Device Targeting - {{ object.short_code }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="mb-0"><i class="fas fa-mobile-alt me-2"></i>Device Targeting</h4>
+                    <small class="text-muted">{{ short_url }}</small>
+                </div>
+                <a href="{% url 'shortener:success' object.pk %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-arrow-left me-1"></i>Back
+                </a>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>How it works:</strong> When device targeting is enabled, visitors will be redirected to different URLs based on their device type or operating system. Rules with higher priority are checked first.
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="form-check form-switch mb-4">
+                        <input type="checkbox" class="form-check-input" id="enable_device_targeting"
+                               name="enable_device_targeting" {% if object.enable_device_targeting %}checked{% endif %}>
+                        <label class="form-check-label" for="enable_device_targeting">
+                            <strong>Enable Device Targeting</strong>
+                        </label>
+                    </div>
+
+                    <h5>Device Rules</h5>
+                    <p class="text-muted small">Configure destination URLs for different devices. Higher priority rules are matched first.</p>
+
+                    {{ formset.management_form }}
+
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="device-targets-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 180px;">Device Type</th>
+                                    <th>Destination URL</th>
+                                    <th style="width: 100px;">Priority</th>
+                                    <th style="width: 80px;">Active</th>
+                                    <th style="width: 80px;">Delete</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for form in formset %}
+                                <tr class="device-row">
+                                    <td>
+                                        {{ form.device_type }}
+                                        {{ form.id }}
+                                    </td>
+                                    <td>
+                                        <input type="url" name="{{ form.destination_url.html_name }}"
+                                               value="{{ form.destination_url.value|default:'' }}"
+                                               class="form-control" placeholder="https://example.com/mobile">
+                                    </td>
+                                    <td>
+                                        <input type="number" name="{{ form.priority.html_name }}"
+                                               value="{{ form.priority.value|default:0 }}"
+                                               class="form-control" min="0">
+                                    </td>
+                                    <td class="text-center">
+                                        <input type="checkbox" name="{{ form.is_active.html_name }}"
+                                               {% if form.is_active.value %}checked{% endif %}
+                                               class="form-check-input">
+                                    </td>
+                                    <td class="text-center">
+                                        {% if form.instance.pk %}
+                                        <input type="checkbox" name="{{ form.DELETE.html_name }}"
+                                               class="form-check-input text-danger">
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="alert alert-secondary mt-3">
+                        <h6><i class="fas fa-lightbulb me-2"></i>Device Type Reference:</h6>
+                        <ul class="mb-0 small">
+                            <li><strong>Mobile/Tablet/Desktop</strong> - Match by device category</li>
+                            <li><strong>iOS/Android</strong> - Match by mobile operating system</li>
+                            <li><strong>Windows/macOS/Linux</strong> - Match by desktop operating system</li>
+                            <li><strong>Default</strong> - Fallback when no other rules match</li>
+                        </ul>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{% url 'shortener:success' object.pk %}" class="btn btn-outline-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Save Device Rules
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .device-row select {
+        width: 100%;
+    }
+    .form-check-input:checked {
+        background-color: var(--bs-primary);
+        border-color: var(--bs-primary);
+    }
+</style>
+{% endblock %}
