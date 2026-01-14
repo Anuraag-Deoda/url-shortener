@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+
+{% block title %}A/B Tests{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-flask me-2"></i>A/B Testing</h2>
+        <a href="{% url 'shortener:abtest_create' %}" class="btn btn-primary">
+            <i class="fas fa-plus me-2"></i>New A/B Test
+        </a>
+    </div>
+
+    {% if tests %}
+    <div class="card shadow">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Test Name</th>
+                        <th>URL</th>
+                        <th>Status</th>
+                        <th>Goal</th>
+                        <th>Visitors</th>
+                        <th>Significance</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for test in tests %}
+                    <tr>
+                        <td>
+                            <strong>{{ test.name }}</strong>
+                            {% if test.description %}
+                            <br><small class="text-muted">{{ test.description|truncatechars:40 }}</small>
+                            {% endif %}
+                        </td>
+                        <td><code>{{ test.url.short_code }}</code></td>
+                        <td>
+                            <span class="badge bg-{% if test.status == 'running' %}success{% elif test.status == 'completed' %}primary{% elif test.status == 'paused' %}warning{% else %}secondary{% endif %}">
+                                {{ test.get_status_display }}
+                            </span>
+                        </td>
+                        <td>{{ test.get_goal_type_display }}</td>
+                        <td>{{ test.visitors }}</td>
+                        <td>
+                            {% if test.is_significant %}
+                            <span class="badge bg-success"><i class="fas fa-check me-1"></i>Significant</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Not Yet</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'shortener:abtest_detail' test.pk %}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-chart-bar"></i>
+                            </a>
+                            <a href="{% url 'shortener:abtest_edit' test.pk %}" class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="card shadow">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-flask fa-4x text-muted mb-4"></i>
+            <h4>No A/B Tests Yet</h4>
+            <p class="text-muted">Create your first A/B test to compare different URL destinations and optimize conversions.</p>
+            <a href="{% url 'shortener:abtest_create' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Create A/B Test
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card shadow mt-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-calculator me-2"></i>Sample Size Calculator</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <label class="form-label">Baseline Conversion Rate (%)</label>
+                    <input type="number" id="baseline" class="form-control" value="5" step="0.1" min="0.1" max="100">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Minimum Detectable Effect (%)</label>
+                    <input type="number" id="mde" class="form-control" value="10" step="1" min="1" max="100">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Confidence Level (%)</label>
+                    <select id="confidence" class="form-select">
+                        <option value="0.90">90%</option>
+                        <option value="0.95" selected>95%</option>
+                        <option value="0.99">99%</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="button" id="calculate-btn" class="btn btn-primary w-100">Calculate</button>
+                </div>
+            </div>
+            <div id="sample-result" class="mt-3 d-none">
+                <div class="alert alert-info">
+                    <strong>Required Sample Size:</strong>
+                    <span id="sample-per-variant"></span> per variant
+                    (<span id="sample-total"></span> total for 2 variants)
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('calculate-btn').addEventListener('click', function() {
+    const baseline = parseFloat(document.getElementById('baseline').value) / 100;
+    const mde = parseFloat(document.getElementById('mde').value) / 100;
+    const confidence = parseFloat(document.getElementById('confidence').value);
+
+    fetch(`{% url 'shortener:api_abtest_sample_size' %}?baseline=${baseline}&mde=${mde}&confidence=${confidence}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('sample-per-variant').textContent =
+                    data.sample_size.toLocaleString();
+                document.getElementById('sample-total').textContent =
+                    data.total_needed.toLocaleString();
+                document.getElementById('sample-result').classList.remove('d-none');
+            }
+        });
+});
+</script>
+{% endblock %}

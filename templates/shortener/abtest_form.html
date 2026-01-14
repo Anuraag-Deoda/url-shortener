@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if object %}Edit{% else %}Create{% endif %} A/B Test{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-flask me-2"></i>
+                        {% if object %}Edit A/B Test{% else %}Create New A/B Test{% endif %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label class="form-label">Test Name *</label>
+                            <input type="text" name="name" class="form-control form-control-lg"
+                                   value="{{ object.name|default:'' }}"
+                                   placeholder="e.g., Homepage Hero Test" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea name="description" class="form-control" rows="2"
+                                      placeholder="What are you testing?">{{ object.description|default:'' }}</textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">URL *</label>
+                            <select name="url" class="form-select" required>
+                                <option value="">Select a URL to test</option>
+                                {% for url in urls %}
+                                <option value="{{ url.pk }}" {% if object.url_id == url.pk %}selected{% endif %}>
+                                    {{ url.short_code }} - {{ url.original_url|truncatechars:50 }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Goal Type</label>
+                                <select name="goal_type" class="form-select">
+                                    <option value="clicks" {% if object.goal_type == 'clicks' %}selected{% endif %}>Click-through Rate</option>
+                                    <option value="conversions" {% if object.goal_type == 'conversions' %}selected{% endif %}>Conversion Rate</option>
+                                    <option value="revenue" {% if object.goal_type == 'revenue' %}selected{% endif %}>Revenue per Click</option>
+                                    <option value="bounce" {% if object.goal_type == 'bounce' %}selected{% endif %}>Bounce Rate (lower is better)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Confidence Level</label>
+                                <select name="confidence_level" class="form-select">
+                                    <option value="0.90" {% if object.confidence_level == 0.90 %}selected{% endif %}>90%</option>
+                                    <option value="0.95" {% if object.confidence_level == 0.95 or not object %}selected{% endif %}>95%</option>
+                                    <option value="0.99" {% if object.confidence_level == 0.99 %}selected{% endif %}>99%</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">Minimum Sample Size (per variant)</label>
+                            <input type="number" name="minimum_sample_size" class="form-control"
+                                   value="{{ object.minimum_sample_size|default:100 }}" min="10">
+                            <small class="text-muted">Minimum visitors per variant before declaring significance</small>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            After creating the test, add variants with different destination URLs to compare.
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'shortener:abtest_list' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Cancel
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save me-2"></i>{% if object %}Save Changes{% else %}Create Test{% endif %}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

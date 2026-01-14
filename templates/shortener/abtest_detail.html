@@ -1,0 +1,235 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ test.name }} - A/B Test Results{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'shortener:abtest_list' %}">A/B Tests</a></li>
+            <li class="breadcrumb-item active">{{ test.name }}</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-flask me-2"></i>{{ test.name }}</h2>
+            {% if test.description %}
+            <p class="text-muted mb-0">{{ test.description }}</p>
+            {% endif %}
+        </div>
+        <div>
+            {% if test.status == 'draft' %}
+            <a href="{% url 'shortener:abtest_start' test.pk %}" class="btn btn-success">
+                <i class="fas fa-play me-2"></i>Start Test
+            </a>
+            {% elif test.status == 'running' %}
+            <a href="{% url 'shortener:abtest_stop' test.pk %}" class="btn btn-warning">
+                <i class="fas fa-stop me-2"></i>Stop Test
+            </a>
+            {% endif %}
+            <a href="{% url 'shortener:abtest_edit' test.pk %}" class="btn btn-outline-secondary">
+                <i class="fas fa-edit me-2"></i>Edit
+            </a>
+        </div>
+    </div>
+
+    <!-- Test Status -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card shadow">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Status</h6>
+                    <span class="badge fs-5 bg-{% if results.status == 'running' %}success{% elif results.status == 'completed' %}primary{% else %}secondary{% endif %}">
+                        {{ results.status|title }}
+                    </span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Total Visitors</h6>
+                    <h3 class="mb-0">{{ results.total_visitors }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Statistical Significance</h6>
+                    {% if results.is_significant %}
+                    <span class="badge fs-5 bg-success"><i class="fas fa-check me-1"></i>Significant</span>
+                    {% else %}
+                    <span class="badge fs-5 bg-warning text-dark">Not Yet</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Winner</h6>
+                    {% if results.winner %}
+                    <h4 class="mb-0 text-success">{{ results.winner }}</h4>
+                    {% else %}
+                    <span class="text-muted">Undetermined</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Variant Results -->
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Variant Performance</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Variant</th>
+                            <th class="text-end">Visitors</th>
+                            <th class="text-end">Clicks</th>
+                            <th class="text-end">Conversions</th>
+                            <th class="text-end">Conv. Rate</th>
+                            <th class="text-end">95% CI</th>
+                            <th class="text-end">Lift</th>
+                            <th class="text-end">Revenue</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for variant in results.variants %}
+                        <tr class="{% if variant.id == results.winner_id %}table-success{% endif %}">
+                            <td>
+                                <strong>{{ variant.name }}</strong>
+                                {% if variant.is_control %}
+                                <span class="badge bg-secondary ms-1">Control</span>
+                                {% endif %}
+                                {% if variant.id == results.winner_id %}
+                                <span class="badge bg-success ms-1"><i class="fas fa-trophy"></i></span>
+                                {% endif %}
+                                <br>
+                                <small class="text-muted">{{ variant.destination_url|truncatechars:40 }}</small>
+                            </td>
+                            <td class="text-end">{{ variant.visitors }}</td>
+                            <td class="text-end">{{ variant.clicks }}</td>
+                            <td class="text-end">{{ variant.conversions }}</td>
+                            <td class="text-end">
+                                <strong>{{ variant.conversion_rate }}%</strong>
+                            </td>
+                            <td class="text-end">
+                                <small class="text-muted">{{ variant.ci_lower }}% - {{ variant.ci_upper }}%</small>
+                            </td>
+                            <td class="text-end">
+                                {% if not variant.is_control %}
+                                <span class="{% if variant.lift > 0 %}text-success{% elif variant.lift < 0 %}text-danger{% endif %}">
+                                    {% if variant.lift > 0 %}+{% endif %}{{ variant.lift }}%
+                                </span>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td class="text-end">${{ variant.revenue|floatformat:2 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Visual Comparison -->
+    <div class="row">
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Conversion Rate Comparison</h5>
+                </div>
+                <div class="card-body">
+                    <div id="conversion-chart" style="height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Test Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Goal Type</dt>
+                        <dd class="col-sm-7">{{ results.goal_type|title }}</dd>
+
+                        <dt class="col-sm-5">Confidence Level</dt>
+                        <dd class="col-sm-7">{{ results.confidence_level|floatformat:0 }}%</dd>
+
+                        <dt class="col-sm-5">Min. Sample Size</dt>
+                        <dd class="col-sm-7">{{ results.minimum_sample_size }} per variant</dd>
+
+                        <dt class="col-sm-5">URL</dt>
+                        <dd class="col-sm-7"><code>{{ test.url.short_code }}</code></dd>
+
+                        {% if test.start_date %}
+                        <dt class="col-sm-5">Started</dt>
+                        <dd class="col-sm-7">{{ test.start_date|date:"M d, Y H:i" }}</dd>
+                        {% endif %}
+
+                        {% if test.end_date %}
+                        <dt class="col-sm-5">Ended</dt>
+                        <dd class="col-sm-7">{{ test.end_date|date:"M d, Y H:i" }}</dd>
+                        {% endif %}
+                    </dl>
+
+                    {% if results.is_significant and results.winner %}
+                    <div class="alert alert-success mt-3 mb-0">
+                        <strong><i class="fas fa-trophy me-2"></i>Winner: {{ results.winner }}</strong>
+                        <p class="mb-0 mt-1">The test has reached statistical significance. You can confidently implement the winning variant.</p>
+                    </div>
+                    {% elif not results.is_significant %}
+                    <div class="alert alert-info mt-3 mb-0">
+                        <strong><i class="fas fa-hourglass-half me-2"></i>More Data Needed</strong>
+                        <p class="mb-0 mt-1">Continue running the test to reach statistical significance.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const variants = {{ results.variants|safe }};
+
+    if (variants && variants.length > 0) {
+        const data = [{
+            x: variants.map(v => v.name),
+            y: variants.map(v => v.conversion_rate),
+            type: 'bar',
+            marker: {
+                color: variants.map(v => v.is_control ? '#6c757d' : '#0d6efd')
+            },
+            error_y: {
+                type: 'data',
+                array: variants.map(v => (v.ci_upper - v.conversion_rate)),
+                arrayminus: variants.map(v => (v.conversion_rate - v.ci_lower)),
+                visible: true
+            }
+        }];
+
+        const layout = {
+            margin: { t: 20, r: 20, b: 60, l: 60 },
+            yaxis: { title: 'Conversion Rate (%)' },
+            paper_bgcolor: 'transparent',
+            plot_bgcolor: 'transparent'
+        };
+
+        Plotly.newPlot('conversion-chart', data, layout, {responsive: true});
+    }
+});
+</script>
+{% endblock %}
