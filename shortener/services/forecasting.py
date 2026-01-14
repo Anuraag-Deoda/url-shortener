@@ -8,11 +8,24 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
 
-import numpy as np
-import pandas as pd
 from django.utils import timezone
 from django.db.models import Count
 from django.db.models.functions import TruncHour, TruncDay, TruncWeek
+
+# Optional dependencies
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None
+    NUMPY_AVAILABLE = False
+
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    pd = None
+    PANDAS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

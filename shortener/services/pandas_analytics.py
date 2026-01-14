@@ -7,11 +7,24 @@ from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 from io import BytesIO, StringIO
 
-import numpy as np
-import pandas as pd
 from django.utils import timezone
 from django.db.models import Count, Sum, Avg, F, Q
 from django.db.models.functions import TruncDate, TruncHour
+
+# Optional dependencies
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None
+    NUMPY_AVAILABLE = False
+
+try:
+    import pandas as pd
+    PANDAS_AVAILABLE = True
+except ImportError:
+    pd = None
+    PANDAS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

@@ -9,11 +9,18 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
 
-import numpy as np
 from django.core.cache import cache
 from django.db.models import Count, Avg
 from django.db.models.functions import TruncHour, TruncDay
 from django.utils import timezone
+
+# Optional dependency
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None
+    NUMPY_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

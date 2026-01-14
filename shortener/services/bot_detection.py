@@ -10,10 +10,17 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from collections import defaultdict
 
-import numpy as np
 from django.utils import timezone
 from django.core.cache import cache
 from django.db.models import Count, Avg, F
+
+# Optional dependency
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None
+    NUMPY_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

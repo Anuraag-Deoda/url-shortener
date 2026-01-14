@@ -6,9 +6,22 @@ import logging
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 
-import numpy as np
-from scipy import stats
 from django.utils import timezone
+
+# Optional dependencies
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None
+    NUMPY_AVAILABLE = False
+
+try:
+    from scipy import stats
+    SCIPY_AVAILABLE = True
+except ImportError:
+    stats = None
+    SCIPY_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

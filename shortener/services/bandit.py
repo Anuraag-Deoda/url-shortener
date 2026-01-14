@@ -7,9 +7,16 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
-import numpy as np
 from django.core.cache import cache
 from django.utils import timezone
+
+# Optional dependency
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    np = None
+    NUMPY_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
